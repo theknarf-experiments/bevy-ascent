@@ -24,7 +24,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Datalog Roguelike".to_string(),
-                resolution: (600u32, 600u32).into(),
+                resolution: (800u32, 600u32).into(),
                 ..default()
             }),
             ..default()
@@ -51,7 +51,7 @@ fn main() {
             OnEnter(GameState::Playing),
             (
                 generate_levels,
-                (spawn_initial_floor, spawn_tooltip, spawn_floor_indicator, reset_game_resources)
+                (spawn_initial_floor, spawn_tooltip, spawn_floor_indicator, spawn_stats_panel, reset_game_resources)
                     .after(generate_levels),
             ),
         )
@@ -62,7 +62,7 @@ fn main() {
         )
         .add_systems(
             Update,
-            (update_tooltip, show_victory_banner, update_floor_indicator)
+            (update_tooltip, show_victory_banner, update_floor_indicator, update_stats_panel)
                 .run_if(in_state(GameState::Playing)),
         )
         // Turn phases (frozen while menu overlay is active)

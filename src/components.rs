@@ -77,6 +77,15 @@ pub struct VictoryBanner;
 #[derive(Component)]
 pub struct FloorIndicator;
 
+#[derive(Component)]
+pub struct StatsPanel;
+
+#[derive(Component)]
+pub struct StatsHpText;
+
+#[derive(Component)]
+pub struct StatsFloorText;
+
 #[derive(Resource, Default)]
 pub struct FloorTransition(pub Option<bool>); // Some(true) = going down, Some(false) = going up
 

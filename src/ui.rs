@@ -406,6 +406,81 @@ pub fn update_floor_indicator(
     }
 }
 
+// ---- Stats Panel (right side) ----
+
+pub fn spawn_stats_panel(mut commands: Commands, floor: Res<CurrentFloor>) {
+    commands
+        .spawn((
+            StatsPanel,
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(0.0),
+                top: Val::Px(0.0),
+                bottom: Val::Px(0.0),
+                width: Val::Px(170.0),
+                padding: UiRect::all(Val::Px(12.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(12.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
+            DespawnOnExit(GameState::Playing),
+            Pickable::IGNORE,
+        ))
+        .with_children(|parent| {
+            // Title
+            parent.spawn((
+                Text::new("Player"),
+                TextFont {
+                    font_size: 22.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.8, 0.3)),
+                Pickable::IGNORE,
+            ));
+
+            // HP
+            parent.spawn((
+                StatsHpText,
+                Text::new("HP: 5"),
+                TextFont {
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.2, 1.0, 0.2)),
+                Pickable::IGNORE,
+            ));
+
+            // Floor
+            parent.spawn((
+                StatsFloorText,
+                Text::new(format!("Floor: {}", floor.0)),
+                TextFont {
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                Pickable::IGNORE,
+            ));
+        });
+}
+
+pub fn update_stats_panel(
+    player_query: Query<&Health, With<Player>>,
+    floor: Res<CurrentFloor>,
+    mut hp_text: Query<&mut Text, (With<StatsHpText>, Without<StatsFloorText>)>,
+    mut floor_text: Query<&mut Text, (With<StatsFloorText>, Without<StatsHpText>)>,
+) {
+    if let Ok(health) = player_query.single() {
+        for mut text in hp_text.iter_mut() {
+            **text = format!("HP: {}", health.0);
+        }
+    }
+    for mut text in floor_text.iter_mut() {
+        **text = format!("Floor: {}", floor.0);
+    }
+}
+
 // ---- Pause Menu ----
 
 pub fn spawn_pause_menu(mut commands: Commands) {
