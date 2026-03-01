@@ -379,9 +379,17 @@ fn player_on_exit_wins() {
 #[test]
 fn player_dead_loses() {
     let mut game = GameHarness::custom();
-    // No player spawned
+    let player = game.spawn_player(IVec2::new(5, 5));
+    // Set player health to 0
+    game.app_mut()
+        .world_mut()
+        .get_mut::<Health>(player)
+        .unwrap()
+        .0 = 0;
     game.enable_win_loss();
-    game.wait_until_state(GameState::GameOver);
+    game.wait_until_overlay(MenuOverlay::GameOver);
+    // Game stays in Playing state (world visible)
+    assert_eq!(game.game_state(), GameState::Playing);
 }
 
 // =========================================================================

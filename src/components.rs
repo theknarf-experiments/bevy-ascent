@@ -221,7 +221,6 @@ pub enum GameState {
     #[default]
     MainMenu,
     Playing,
-    GameOver,
 }
 
 #[derive(Resource, Default)]
@@ -269,6 +268,7 @@ pub enum MenuOverlay {
     None,
     Paused,
     Settings,
+    GameOver,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

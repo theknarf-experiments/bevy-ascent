@@ -178,9 +178,9 @@ pub fn show_victory_banner(
         });
 }
 
-// ---- Game Over Screen ----
+// ---- Death Overlay (small corner banner, game world stays visible) ----
 
-pub fn spawn_game_over_screen(mut commands: Commands, death_cause: Res<DeathCause>) {
+pub fn spawn_death_overlay(mut commands: Commands, death_cause: Res<DeathCause>) {
     let cause_text = death_cause
         .0
         .as_deref()
@@ -188,34 +188,38 @@ pub fn spawn_game_over_screen(mut commands: Commands, death_cause: Res<DeathCaus
     commands
         .spawn((
             Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(10.0),
+                left: Val::Px(10.0),
+                padding: UiRect::all(Val::Px(12.0)),
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(30.0),
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(8.0),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.3, 0.1, 0.1, 0.9)),
-            DespawnOnExit(GameState::GameOver),
+            BackgroundColor(Color::srgba(0.4, 0.1, 0.1, 0.9)),
+            DespawnOnExit(MenuOverlay::GameOver),
+            Pickable::IGNORE,
         ))
         .with_children(|parent| {
             parent.spawn((
-                Text::new("Game Over"),
+                Text::new("You Died"),
                 TextFont {
-                    font_size: 64.0,
+                    font_size: 28.0,
                     ..default()
                 },
                 TextColor(Color::srgb(1.0, 0.3, 0.3)),
+                Pickable::IGNORE,
             ));
 
             parent.spawn((
                 Text::new(cause_text.to_string()),
                 TextFont {
-                    font_size: 20.0,
+                    font_size: 14.0,
                     ..default()
                 },
                 TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                Pickable::IGNORE,
             ));
 
             parent
@@ -225,14 +229,17 @@ pub fn spawn_game_over_screen(mut commands: Commands, death_cause: Res<DeathCaus
                     (Spawn((
                         Text::new("Try Again"),
                         TextFont {
-                            font_size: 24.0,
+                            font_size: 16.0,
                             ..default()
                         },
                     )),),
                 ))
                 .observe(
-                    |_trigger: On<Activate>, mut next_state: ResMut<NextState<GameState>>| {
-                        next_state.set(GameState::Playing);
+                    |_trigger: On<Activate>,
+                     mut next_state: ResMut<NextState<GameState>>,
+                     mut next_overlay: ResMut<NextState<MenuOverlay>>| {
+                        next_overlay.set(MenuOverlay::None);
+                        next_state.set(GameState::MainMenu);
                     },
                 );
         });
@@ -985,5 +992,8 @@ pub fn handle_esc_key(
             SettingsFrom::Paused => next_overlay.set(MenuOverlay::Paused),
             SettingsFrom::MainMenu => next_overlay.set(MenuOverlay::None),
         },
+        MenuOverlay::GameOver => {
+            // No-op: player must click Try Again
+        }
     }
 }

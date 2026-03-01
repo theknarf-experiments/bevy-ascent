@@ -147,8 +147,8 @@ fn main() {
                 .run_if(in_state(GameState::Playing))
                 .run_if(in_state(MenuOverlay::None)),
         )
-        // GameOver screen
-        .add_systems(OnEnter(GameState::GameOver), spawn_game_over_screen)
+        // Death overlay (corner banner, game world stays visible)
+        .add_systems(OnEnter(MenuOverlay::GameOver), spawn_death_overlay)
         // Global observers for hover tooltip
         .add_observer(on_hover_over)
         .add_observer(on_hover_out)

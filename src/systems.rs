@@ -218,7 +218,10 @@ pub fn apply_consequences(
                         }
                     }
                 }
-                commands.entity(entity).despawn();
+                // Don't despawn the player — keep them visible on the grid
+                if !is_player {
+                    commands.entity(entity).despawn();
+                }
             }
         }
     }
@@ -324,20 +327,13 @@ pub fn reset_game_resources(
 }
 
 pub fn check_loss(
-    mut commands: Commands,
-    player_query: Query<(Entity, &Health), With<Player>>,
-    mut next_state: ResMut<NextState<GameState>>,
-    death_cause: Res<DeathCause>,
+    player_query: Query<&Health, With<Player>>,
+    mut next_overlay: ResMut<NextState<MenuOverlay>>,
 ) {
-    let Ok((entity, health)) = player_query.single() else {
-        next_state.set(GameState::GameOver);
+    let Ok(health) = player_query.single() else {
         return;
     };
     if health.0 <= 0 {
-        commands.entity(entity).despawn();
-        if death_cause.0.is_none() {
-            // Fallback handled by game over screen
-        }
-        next_state.set(GameState::GameOver);
+        next_overlay.set(MenuOverlay::GameOver);
     }
 }

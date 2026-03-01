@@ -161,6 +161,17 @@ impl GameHarness {
         );
     }
 
+    pub fn menu_overlay(&mut self) -> MenuOverlay {
+        *self.app.world_mut().resource::<State<MenuOverlay>>().get()
+    }
+
+    pub fn wait_until_overlay(&mut self, overlay: MenuOverlay) {
+        self.wait_until(
+            move |app| *app.world_mut().resource::<State<MenuOverlay>>().get() == overlay,
+            MAX_FRAMES,
+        );
+    }
+
     /// Run one resolve+consequences cycle (sets phase to ResolveEnvironment and waits for return).
     pub fn resolve(&mut self) {
         self.app
