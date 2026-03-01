@@ -51,67 +51,72 @@ pub fn spawn_main_menu(mut commands: Commands) {
                 TextColor(Color::srgb(0.6, 0.6, 0.6)),
             ));
 
-            // Start button
-            parent
-                .spawn(button(
-                    ButtonProps::default(),
-                    (),
-                    (Spawn((
-                        Text::new("Start Game"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
+            // Button container (fixed width so all buttons match)
+            parent.spawn(Node {
+                width: Val::Px(200.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(10.0),
+                ..default()
+            }).with_children(|buttons| {
+                buttons
+                    .spawn(button(
+                        ButtonProps::default(),
+                        (),
+                        (Spawn((
+                            Text::new("Start Game"),
+                            TextFont {
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        )),),
+                    ))
+                    .observe(
+                        |_trigger: On<Activate>,
+                         mut next_state: ResMut<NextState<GameState>>| {
+                            next_state.set(GameState::Playing);
                         },
-                    )),),
-                ))
-                .observe(
-                    |_trigger: On<Activate>,
-                     mut next_state: ResMut<NextState<GameState>>| {
-                        next_state.set(GameState::Playing);
-                    },
-                );
+                    );
 
-            // Settings button
-            parent
-                .spawn(button(
-                    ButtonProps::default(),
-                    (),
-                    (Spawn((
-                        Text::new("Settings"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
+                buttons
+                    .spawn(button(
+                        ButtonProps::default(),
+                        (),
+                        (Spawn((
+                            Text::new("Settings"),
+                            TextFont {
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        )),),
+                    ))
+                    .observe(
+                        |_trigger: On<Activate>,
+                         mut next_overlay: ResMut<NextState<MenuOverlay>>,
+                         mut origin: ResMut<SettingsOrigin>| {
+                            origin.0 = SettingsFrom::MainMenu;
+                            next_overlay.set(MenuOverlay::Settings);
                         },
-                    )),),
-                ))
-                .observe(
-                    |_trigger: On<Activate>,
-                     mut next_overlay: ResMut<NextState<MenuOverlay>>,
-                     mut origin: ResMut<SettingsOrigin>| {
-                        origin.0 = SettingsFrom::MainMenu;
-                        next_overlay.set(MenuOverlay::Settings);
-                    },
-                );
+                    );
 
-            // Quit button
-            parent
-                .spawn(button(
-                    ButtonProps::default(),
-                    (),
-                    (Spawn((
-                        Text::new("Quit"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
+                buttons
+                    .spawn(button(
+                        ButtonProps::default(),
+                        (),
+                        (Spawn((
+                            Text::new("Quit"),
+                            TextFont {
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        )),),
+                    ))
+                    .observe(
+                        |_trigger: On<Activate>,
+                         mut exit: MessageWriter<AppExit>| {
+                            exit.write(AppExit::Success);
                         },
-                    )),),
-                ))
-                .observe(
-                    |_trigger: On<Activate>,
-                     mut exit: MessageWriter<AppExit>| {
-                        exit.write(AppExit::Success);
-                    },
-                );
+                    );
+            });
         });
 }
 
@@ -675,69 +680,74 @@ pub fn spawn_pause_menu(mut commands: Commands) {
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
 
-            // Continue
-            parent
-                .spawn(button(
-                    ButtonProps::default(),
-                    (),
-                    (Spawn((
-                        Text::new("Continue"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
+            // Button container (fixed width so all buttons match)
+            parent.spawn(Node {
+                width: Val::Px(200.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(10.0),
+                ..default()
+            }).with_children(|buttons| {
+                buttons
+                    .spawn(button(
+                        ButtonProps::default(),
+                        (),
+                        (Spawn((
+                            Text::new("Continue"),
+                            TextFont {
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        )),),
+                    ))
+                    .observe(
+                        |_trigger: On<Activate>,
+                         mut next_overlay: ResMut<NextState<MenuOverlay>>| {
+                            next_overlay.set(MenuOverlay::None);
                         },
-                    )),),
-                ))
-                .observe(
-                    |_trigger: On<Activate>,
-                     mut next_overlay: ResMut<NextState<MenuOverlay>>| {
-                        next_overlay.set(MenuOverlay::None);
-                    },
-                );
+                    );
 
-            // Settings
-            parent
-                .spawn(button(
-                    ButtonProps::default(),
-                    (),
-                    (Spawn((
-                        Text::new("Settings"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
+                buttons
+                    .spawn(button(
+                        ButtonProps::default(),
+                        (),
+                        (Spawn((
+                            Text::new("Settings"),
+                            TextFont {
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        )),),
+                    ))
+                    .observe(
+                        |_trigger: On<Activate>,
+                         mut next_overlay: ResMut<NextState<MenuOverlay>>,
+                         mut origin: ResMut<SettingsOrigin>| {
+                            origin.0 = SettingsFrom::Paused;
+                            next_overlay.set(MenuOverlay::Settings);
                         },
-                    )),),
-                ))
-                .observe(
-                    |_trigger: On<Activate>,
-                     mut next_overlay: ResMut<NextState<MenuOverlay>>,
-                     mut origin: ResMut<SettingsOrigin>| {
-                        origin.0 = SettingsFrom::Paused;
-                        next_overlay.set(MenuOverlay::Settings);
-                    },
-                );
+                    );
 
-            // Quit to Menu
-            parent
-                .spawn(button(
-                    ButtonProps::default(),
-                    (),
-                    (Spawn((
-                        Text::new("Quit to Menu"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
+                buttons
+                    .spawn(button(
+                        ButtonProps::default(),
+                        (),
+                        (Spawn((
+                            Text::new("Quit to Menu"),
+                            TextFont {
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        )),),
+                    ))
+                    .observe(
+                        |_trigger: On<Activate>,
+                         mut next_overlay: ResMut<NextState<MenuOverlay>>,
+                         mut next_state: ResMut<NextState<GameState>>| {
+                            next_overlay.set(MenuOverlay::None);
+                            next_state.set(GameState::MainMenu);
                         },
-                    )),),
-                ))
-                .observe(
-                    |_trigger: On<Activate>,
-                     mut next_overlay: ResMut<NextState<MenuOverlay>>,
-                     mut next_state: ResMut<NextState<GameState>>| {
-                        next_overlay.set(MenuOverlay::None);
-                        next_state.set(GameState::MainMenu);
-                    },
-                );
+                    );
+            });
         });
 }
 
@@ -777,29 +787,36 @@ pub fn spawn_settings_menu(mut commands: Commands) {
                 TextColor(Color::srgb(0.6, 0.6, 0.6)),
             ));
 
-            // Back
-            parent
-                .spawn(button(
-                    ButtonProps::default(),
-                    (),
-                    (Spawn((
-                        Text::new("Back"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
+            // Button container (fixed width for consistency)
+            parent.spawn(Node {
+                width: Val::Px(200.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(10.0),
+                ..default()
+            }).with_children(|buttons| {
+                buttons
+                    .spawn(button(
+                        ButtonProps::default(),
+                        (),
+                        (Spawn((
+                            Text::new("Back"),
+                            TextFont {
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        )),),
+                    ))
+                    .observe(
+                        |_trigger: On<Activate>,
+                         mut next_overlay: ResMut<NextState<MenuOverlay>>,
+                         origin: Res<SettingsOrigin>| {
+                            match origin.0 {
+                                SettingsFrom::Paused => next_overlay.set(MenuOverlay::Paused),
+                                SettingsFrom::MainMenu => next_overlay.set(MenuOverlay::None),
+                            }
                         },
-                    )),),
-                ))
-                .observe(
-                    |_trigger: On<Activate>,
-                     mut next_overlay: ResMut<NextState<MenuOverlay>>,
-                     origin: Res<SettingsOrigin>| {
-                        match origin.0 {
-                            SettingsFrom::Paused => next_overlay.set(MenuOverlay::Paused),
-                            SettingsFrom::MainMenu => next_overlay.set(MenuOverlay::None),
-                        }
-                    },
-                );
+                    );
+            });
         });
 }
 
