@@ -257,9 +257,6 @@ pub struct StatsFloorText;
 #[derive(Resource, Default)]
 pub struct FloorTransition(pub Option<bool>); // Some(true) = going down, Some(false) = going up
 
-#[derive(Resource, Default)]
-pub struct PlayerMoved(pub bool);
-
 #[derive(Component)]
 pub struct FlashTimer(pub Timer);
 
@@ -294,7 +291,17 @@ impl Default for SettingsOrigin {
 pub enum TurnPhase {
     #[default]
     WaitingForInput,
-    EnemyTurn,
+    PlayerResolve,
+    EnemyResolve,
     ResolveEnvironment,
     ApplyConsequences,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlayerAction {
+    Move(IVec2),
+    UseConsumable(usize),
+}
+
+#[derive(Resource, Default)]
+pub struct PendingAction(pub Option<PlayerAction>);

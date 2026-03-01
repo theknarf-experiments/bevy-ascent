@@ -14,7 +14,7 @@ use bevy::feathers::FeathersPlugins;
 use bevy::prelude::*;
 
 use components::*;
-use datalog::resolve_environment;
+use datalog::{resolve_enemy_turn, resolve_environment, resolve_player_turn};
 use fov::update_fog_of_war;
 use level::spawn_initial_floor;
 use level_gen::generate_levels;
@@ -42,10 +42,10 @@ fn main() {
         .init_resource::<FloorTransition>()
         .init_resource::<SettingsOrigin>()
         .init_resource::<GoldCount>()
-        .init_resource::<PlayerMoved>()
         .init_resource::<FogMap>()
         .init_resource::<GameLog>()
         .init_resource::<DeathCause>()
+        .init_resource::<PendingAction>()
         // Global: camera persists across all states
         .add_systems(Startup, setup_camera)
         // Main Menu
@@ -78,7 +78,12 @@ fn main() {
         )
         .add_systems(
             Update,
-            (spawn_sprites, sync_transforms, sync_visibility, tick_flash_timers)
+            (
+                spawn_sprites,
+                sync_transforms,
+                sync_visibility,
+                tick_flash_timers,
+            )
                 .run_if(in_state(GameState::Playing)),
         )
         .add_systems(
@@ -100,11 +105,7 @@ fn main() {
         // Turn phases (frozen while menu overlay is active)
         .add_systems(
             Update,
-            (
-                player_input,
-                pickup_items.after(player_input),
-                use_consumable,
-            )
+            player_input
                 .run_if(in_state(TurnPhase::WaitingForInput))
                 .run_if(in_state(MenuOverlay::None)),
         )
@@ -117,8 +118,14 @@ fn main() {
         )
         .add_systems(
             Update,
-            enemy_turn
-                .run_if(in_state(TurnPhase::EnemyTurn))
+            resolve_player_turn
+                .run_if(in_state(TurnPhase::PlayerResolve))
+                .run_if(in_state(MenuOverlay::None)),
+        )
+        .add_systems(
+            Update,
+            resolve_enemy_turn
+                .run_if(in_state(TurnPhase::EnemyResolve))
                 .run_if(in_state(MenuOverlay::None)),
         )
         .add_systems(

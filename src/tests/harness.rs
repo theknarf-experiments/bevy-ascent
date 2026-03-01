@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::BTreeSet;
 
 use crate::components::*;
-use crate::datalog::resolve_environment;
+use crate::datalog::{resolve_enemy_turn, resolve_environment, resolve_player_turn};
 use crate::fov::update_fog_of_war;
 use crate::items::spawn_item;
 use crate::level::spawn_initial_floor;
@@ -75,21 +75,16 @@ impl GameHarness {
         app.init_state::<MenuOverlay>();
         app.init_resource::<SettingsOrigin>();
         app.init_resource::<GoldCount>();
-        app.init_resource::<PlayerMoved>();
         app.init_resource::<FogMap>();
         app.init_resource::<GameLog>();
         app.init_resource::<DeathCause>();
+        app.init_resource::<PendingAction>();
         app.insert_resource(fallback_floors());
 
         // Turn-phase systems (same as main.rs, minus rendering and win/loss)
         app.add_systems(
             Update,
-            (
-                player_input,
-                pickup_items.after(player_input),
-                use_consumable,
-            )
-                .run_if(in_state(TurnPhase::WaitingForInput)),
+            player_input.run_if(in_state(TurnPhase::WaitingForInput)),
         );
         app.add_systems(
             Update,
@@ -97,17 +92,24 @@ impl GameHarness {
                 .after(player_input)
                 .run_if(in_state(GameState::Playing)),
         );
-        app.add_systems(Update, enemy_turn.run_if(in_state(TurnPhase::EnemyTurn)));
+        app.add_systems(
+            Update,
+            resolve_player_turn.run_if(in_state(TurnPhase::PlayerResolve)),
+        );
+        app.add_systems(
+            Update,
+            resolve_enemy_turn.run_if(in_state(TurnPhase::EnemyResolve)),
+        );
+        app.add_systems(
+            Update,
+            resolve_environment.run_if(in_state(TurnPhase::ResolveEnvironment)),
+        );
         app.add_systems(
             Update,
             update_fog_of_war
                 .after(player_input)
                 .after(handle_floor_transition)
                 .run_if(in_state(GameState::Playing)),
-        );
-        app.add_systems(
-            Update,
-            resolve_environment.run_if(in_state(TurnPhase::ResolveEnvironment)),
         );
         app.add_systems(
             Update,

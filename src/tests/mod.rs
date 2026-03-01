@@ -20,7 +20,7 @@ fn player_input_system_params_are_valid() {
 }
 
 #[test]
-fn enemy_turn_system_params_are_valid() {
+fn resolve_enemy_turn_system_params_are_valid() {
     let mut game = GameHarness::custom();
     game.spawn_player(IVec2::new(5, 5));
     game.spawn_enemy(IVec2::new(8, 8));
@@ -28,8 +28,9 @@ fn enemy_turn_system_params_are_valid() {
 }
 
 #[test]
-fn resolve_environment_system_params_are_valid() {
+fn resolve_player_turn_system_params_are_valid() {
     let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
     game.spawn_torch(IVec2::new(1, 1));
     game.app_mut().update();
 }
@@ -397,7 +398,7 @@ fn enemy_moves_toward_player() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     let enemy_pos = game.entity_pos(enemy).unwrap();
@@ -417,7 +418,7 @@ fn enemy_attacks_adjacent_player() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     assert_eq!(
@@ -1207,8 +1208,9 @@ fn health_potion_restores_hp() {
         }
     }
 
-    // Use consumable
+    // Use consumable (goes through PlayerResolve phase)
     game.press_key(KeyCode::Digit1);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
 
     assert_eq!(
         game.player_health(),
@@ -1238,8 +1240,9 @@ fn antidote_removes_poison() {
         }
     }
 
-    // Use antidote
+    // Use antidote (goes through PlayerResolve phase)
     game.press_key(KeyCode::Digit1);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
 
     let player_pos = game.player_pos().unwrap();
     let tags = game.tags_at(player_pos);
@@ -1255,8 +1258,9 @@ fn use_empty_slot_noop() {
     let mut game = GameHarness::custom();
     game.spawn_player(IVec2::new(5, 5));
 
-    // Try to use empty slot — should not crash
+    // Try to use empty slot — should not crash (goes through PlayerResolve)
     game.press_key(KeyCode::Digit1);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
     assert_eq!(game.player_health(), Some(5), "health should be unchanged");
 }
 
@@ -1362,7 +1366,7 @@ fn armor_reduces_melee_damage() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     // With armor defense 1, melee dmg = max(1-1, 0) = 0
@@ -1382,7 +1386,7 @@ fn no_armor_full_damage() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     assert_eq!(
@@ -1655,7 +1659,7 @@ fn dragon_breathes_fire_toward_player() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     // Fire should spawn at (7,5), (6,5), (5,5) — 3 tiles toward player
@@ -1685,7 +1689,7 @@ fn dragon_melee_attacks_adjacent_player() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     // Dragon deals 2 melee damage + 1 fire damage (OnFire tag) via environment resolve
@@ -1706,7 +1710,7 @@ fn dragon_fire_stops_at_wall() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     // Fire at (7,5) should exist (before wall)
@@ -1732,7 +1736,7 @@ fn dragon_does_not_move() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     assert_eq!(
@@ -1766,7 +1770,7 @@ fn dragon_fire_ignites_barrel() {
     game.app_mut()
         .world_mut()
         .resource_mut::<NextState<TurnPhase>>()
-        .set(TurnPhase::EnemyTurn);
+        .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     // Fire entity at (7,5) should have been spawned — now resolve to see systemic effects
