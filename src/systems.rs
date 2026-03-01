@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use std::collections::BTreeSet;
 
 use crate::components::*;
+use crate::level_gen::GeneratedFloors;
 
 pub fn player_input(
     keys: Res<ButtonInput<KeyCode>>,
@@ -285,6 +286,7 @@ pub fn handle_floor_transition(
     floor_entities: Query<Entity, With<FloorEntity>>,
     mut player_query: Query<&mut GridPos, With<Player>>,
     mut current_floor: ResMut<CurrentFloor>,
+    generated: Res<GeneratedFloors>,
 ) {
     let Some(going_down) = transition.0.take() else {
         return;
@@ -302,7 +304,7 @@ pub fn handle_floor_transition(
     }
 
     // Spawn new floor
-    let result = crate::level::spawn_floor(&mut commands, new_floor);
+    let result = crate::level::spawn_floor(&mut commands, &generated.floors[(new_floor - 1) as usize]);
 
     // Reposition player: going down → appear at stairs up; going up → appear at stairs down
     if let Ok(mut player_pos) = player_query.single_mut() {

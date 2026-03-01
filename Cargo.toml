@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 bevy = { version = "0.18", features = ["experimental_bevy_feathers"] }
 ascent = "0.8"
+clingo = { version = "0.8", features = ["static-linking"] }

@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use crate::components::*;
 use crate::datalog::resolve_environment;
 use crate::level::spawn_initial_floor;
+use crate::level_gen::fallback_floors;
 use crate::systems::*;
 
 const MAX_FRAMES: usize = 100;
@@ -69,6 +70,7 @@ impl GameHarness {
         app.init_resource::<CurrentFloor>();
         app.init_resource::<VictoryAchieved>();
         app.init_resource::<FloorTransition>();
+        app.insert_resource(fallback_floors());
 
         // Turn-phase systems (same as main.rs, minus rendering and win/loss)
         app.add_systems(

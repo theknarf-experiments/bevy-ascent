@@ -1,6 +1,7 @@
 mod components;
 mod datalog;
 mod level;
+mod level_gen;
 mod render;
 mod systems;
 mod ui;
@@ -13,6 +14,7 @@ use bevy::feathers::FeathersPlugins;
 use components::*;
 use datalog::resolve_environment;
 use level::spawn_initial_floor;
+use level_gen::generate_levels;
 use render::*;
 use systems::*;
 use ui::*;
@@ -41,7 +43,11 @@ fn main() {
         // Playing
         .add_systems(
             OnEnter(GameState::Playing),
-            (spawn_initial_floor, spawn_tooltip, spawn_floor_indicator, reset_game_resources),
+            (
+                generate_levels,
+                (spawn_initial_floor, spawn_tooltip, spawn_floor_indicator, reset_game_resources)
+                    .after(generate_levels),
+            ),
         )
         .add_systems(
             Update,

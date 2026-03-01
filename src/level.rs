@@ -2,57 +2,7 @@ use bevy::prelude::*;
 use std::collections::BTreeSet;
 
 use crate::components::*;
-
-const FLOOR_1: &str = "\
-############
-#..........#
-#.B..o.....#
-#..........#
-#.o.##.T...#
-#...##...g.#
-#..B...o...#
-#.....##.B.#
-#..T..##...#
-#.g.......>#
-#....@.....#
-############";
-
-const FLOOR_2: &str = "\
-############
-#<.........#
-#..........#
-#..T...o...#
-#...##.....#
-#...##..B..#
-#.o........#
-#..........#
-#.....B....#
-#..........#
-#.........>#
-############";
-
-const FLOOR_3: &str = "\
-############
-#<.........#
-#..........#
-#....o.....#
-#...##..g..#
-#...##.....#
-#..B...T...#
-#..........#
-#..T..##...#
-#.g...##...#
-#........E.#
-############";
-
-fn floor_layout(floor: u32) -> &'static str {
-    match floor {
-        1 => FLOOR_1,
-        2 => FLOOR_2,
-        3 => FLOOR_3,
-        _ => panic!("Invalid floor number: {}", floor),
-    }
-}
+use crate::level_gen::GeneratedFloors;
 
 pub struct FloorSpawnResult {
     pub player_spawn: Option<IVec2>,
@@ -60,8 +10,7 @@ pub struct FloorSpawnResult {
     pub stairs_down_pos: Option<IVec2>,
 }
 
-pub fn spawn_floor(commands: &mut Commands, floor: u32) -> FloorSpawnResult {
-    let layout = floor_layout(floor);
+pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
     let mut result = FloorSpawnResult {
         player_spawn: None,
         stairs_up_pos: None,
@@ -171,9 +120,13 @@ pub fn spawn_floor(commands: &mut Commands, floor: u32) -> FloorSpawnResult {
     result
 }
 
-pub fn spawn_initial_floor(mut commands: Commands, mut floor: ResMut<CurrentFloor>) {
+pub fn spawn_initial_floor(
+    mut commands: Commands,
+    mut floor: ResMut<CurrentFloor>,
+    generated: Res<GeneratedFloors>,
+) {
     floor.0 = 1;
-    let result = spawn_floor(&mut commands, 1);
+    let result = spawn_floor(&mut commands, &generated.floors[0]);
     let player_pos = result.player_spawn.expect("Floor 1 must have a player spawn (@)");
     commands.spawn((
         GridPos(player_pos),
