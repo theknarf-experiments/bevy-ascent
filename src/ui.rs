@@ -72,40 +72,43 @@ pub fn spawn_main_menu(mut commands: Commands) {
         });
 }
 
-// ---- Victory Screen ----
+// ---- Victory Banner (small corner banner, doesn't freeze gameplay) ----
 
-pub fn spawn_victory_screen(mut commands: Commands) {
+pub fn show_victory_banner(
+    mut commands: Commands,
+    victory: Res<VictoryAchieved>,
+    existing: Query<(), With<VictoryBanner>>,
+) {
+    if !victory.0 || !existing.is_empty() {
+        return;
+    }
+
     commands
         .spawn((
+            VictoryBanner,
             Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                top: Val::Px(10.0),
+                right: Val::Px(10.0),
+                padding: UiRect::all(Val::Px(12.0)),
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(30.0),
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(8.0),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.1, 0.3, 0.1, 0.9)),
-            DespawnOnExit(GameState::Victory),
+            DespawnOnExit(GameState::Playing),
+            Pickable::IGNORE,
         ))
         .with_children(|parent| {
             parent.spawn((
                 Text::new("Victory!"),
                 TextFont {
-                    font_size: 64.0,
+                    font_size: 28.0,
                     ..default()
                 },
                 TextColor(Color::srgb(0.3, 1.0, 0.3)),
-            ));
-
-            parent.spawn((
-                Text::new("You escaped the dungeon!"),
-                TextFont {
-                    font_size: 20.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                Pickable::IGNORE,
             ));
 
             parent
@@ -115,7 +118,7 @@ pub fn spawn_victory_screen(mut commands: Commands) {
                     (Spawn((
                         Text::new("Play Again"),
                         TextFont {
-                            font_size: 24.0,
+                            font_size: 16.0,
                             ..default()
                         },
                     )),),
@@ -123,7 +126,7 @@ pub fn spawn_victory_screen(mut commands: Commands) {
                 .observe(
                     |_trigger: On<Activate>,
                      mut next_state: ResMut<NextState<GameState>>| {
-                        next_state.set(GameState::Playing);
+                        next_state.set(GameState::MainMenu);
                     },
                 );
         });
@@ -250,6 +253,8 @@ pub fn update_tooltip(
         Option<&Blocking>,
         Option<&Tags>,
         Option<&Health>,
+        Option<&StairsDown>,
+        Option<&StairsUp>,
     )>,
     window_query: Query<&Window>,
 ) {
@@ -264,12 +269,12 @@ pub fn update_tooltip(
 
     // Collect entities at this cell
     let mut lines: Vec<String> = Vec::new();
-    for (grid_pos, player, enemy, exit, pushable, blocking, tags, health) in entity_query.iter() {
+    for (grid_pos, player, enemy, exit, pushable, blocking, tags, health, stairs_down, stairs_up) in entity_query.iter() {
         if grid_pos.0 != cell {
             continue;
         }
-        let name = name_for(player, enemy, exit, pushable, blocking, tags);
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags);
+        let name = name_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up);
 
         let mut line = format!("{} ({})", name, glyph);
 
@@ -320,5 +325,41 @@ pub fn update_tooltip(
     if let Some(cursor_pos) = window.cursor_position() {
         node.left = Val::Px(cursor_pos.x + 15.0);
         node.top = Val::Px(cursor_pos.y + 15.0);
+    }
+}
+
+// ---- Floor Indicator ----
+
+pub fn spawn_floor_indicator(mut commands: Commands, floor: Res<CurrentFloor>) {
+    commands.spawn((
+        FloorIndicator,
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            padding: UiRect::all(Val::Px(8.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
+        DespawnOnExit(GameState::Playing),
+        Pickable::IGNORE,
+        Text::new(format!("Floor {}", floor.0)),
+        TextFont {
+            font_size: 18.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.9, 0.9, 0.9)),
+    ));
+}
+
+pub fn update_floor_indicator(
+    floor: Res<CurrentFloor>,
+    mut query: Query<&mut Text, With<FloorIndicator>>,
+) {
+    if !floor.is_changed() {
+        return;
+    }
+    for mut text in query.iter_mut() {
+        **text = format!("Floor {}", floor.0);
     }
 }

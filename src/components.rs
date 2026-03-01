@@ -53,9 +53,32 @@ pub enum GameState {
     #[default]
     MainMenu,
     Playing,
-    Victory,
     GameOver,
 }
+
+#[derive(Resource, Default)]
+pub struct CurrentFloor(pub u32);
+
+#[derive(Resource, Default)]
+pub struct VictoryAchieved(pub bool);
+
+#[derive(Component)]
+pub struct FloorEntity;
+
+#[derive(Component)]
+pub struct StairsDown;
+
+#[derive(Component)]
+pub struct StairsUp;
+
+#[derive(Component)]
+pub struct VictoryBanner;
+
+#[derive(Component)]
+pub struct FloorIndicator;
+
+#[derive(Resource, Default)]
+pub struct FloorTransition(pub Option<bool>); // Some(true) = going down, Some(false) = going up
 
 #[derive(Component)]
 pub struct FlashTimer(pub Timer);

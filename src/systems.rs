@@ -7,13 +7,17 @@ pub fn player_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut player_query: Query<&mut GridPos, With<Player>>,
-    blocking_query: Query<(Entity, &GridPos), (With<Blocking>, Without<Player>, Without<Pushable>)>,
+    blocking_query: Query<(Entity, &GridPos), (With<Blocking>, Without<Player>, Without<Pushable>, Without<Enemy>)>,
     mut pushable_query: Query<
         (Entity, &mut GridPos, Option<&Blocking>),
         (With<Pushable>, Without<Player>),
     >,
     all_pos_query: Query<&GridPos, (Without<Player>, Without<Pushable>)>,
     mut next_phase: ResMut<NextState<TurnPhase>>,
+    stairs_down: Query<&GridPos, (With<StairsDown>, Without<Player>, Without<Pushable>)>,
+    stairs_up: Query<&GridPos, (With<StairsUp>, Without<Player>, Without<Pushable>)>,
+    mut floor_transition: ResMut<FloorTransition>,
+    mut enemy_combat: Query<(Entity, &GridPos, &mut Health), (With<Enemy>, Without<Player>, Without<Pushable>)>,
 ) {
     let dir = if keys.just_pressed(KeyCode::ArrowUp) {
         IVec2::new(0, -1)
@@ -33,6 +37,18 @@ pub fn player_input(
 
     let target = player_pos.0 + dir;
 
+    // Check if there's an enemy at the target — melee attack
+    if let Some((enemy_entity, _, mut enemy_hp)) =
+        enemy_combat.iter_mut().find(|(_, gp, _)| gp.0 == target)
+    {
+        enemy_hp.0 -= 1;
+        if enemy_hp.0 <= 0 {
+            commands.entity(enemy_entity).despawn();
+        }
+        next_phase.set(TurnPhase::EnemyTurn);
+        return;
+    }
+
     // Check if there's a pushable entity at the target
     let pushable_at_target = pushable_query
         .iter()
@@ -41,19 +57,19 @@ pub fn player_input(
 
     if let Some(push_entity) = pushable_at_target {
         let push_dest = target + dir;
-        // Check push destination is free of all blocking (walls + other pushable-blocking)
+        // Check push destination is free of all blocking (walls + other pushable-blocking + enemies)
         let dest_blocked_wall = blocking_query.iter().any(|(_, gp)| gp.0 == push_dest);
+        let dest_blocked_enemy = enemy_combat.iter().any(|(_, gp, _)| gp.0 == push_dest);
         let dest_blocked_pushable = pushable_query
             .iter()
             .any(|(e, pos, _)| e != push_entity && pos.0 == push_dest);
         let dest_occupied = all_pos_query.iter().any(|gp| gp.0 == push_dest);
 
-        if !dest_blocked_wall && !dest_blocked_pushable && !dest_occupied {
+        if !dest_blocked_wall && !dest_blocked_enemy && !dest_blocked_pushable && !dest_occupied {
             if let Ok((_, mut push_pos, _)) = pushable_query.get_mut(push_entity) {
                 push_pos.0 = push_dest;
             }
             player_pos.0 = target;
-            next_phase.set(TurnPhase::EnemyTurn);
         } else {
             // Can't push; check if pushable is non-blocking (can walk through it)
             let pushable_is_blocking = pushable_query
@@ -62,21 +78,20 @@ pub fn player_input(
                 .unwrap_or(false);
             if !pushable_is_blocking {
                 player_pos.0 = target;
-                next_phase.set(TurnPhase::EnemyTurn);
             } else {
                 // Blocked — flash the blocking pushable
                 flash_entity(&mut commands, push_entity);
+                return;
             }
         }
     } else {
-        // No pushable at target — check if blocked by wall or enemy
+        // No pushable at target — check if blocked by wall
         let blocked_wall = blocking_query.iter().find(|(_, gp)| gp.0 == target);
         let blocked_pushable = pushable_query
             .iter()
             .find(|(_, pos, b)| pos.0 == target && b.is_some());
         if blocked_wall.is_none() && blocked_pushable.is_none() {
             player_pos.0 = target;
-            next_phase.set(TurnPhase::EnemyTurn);
         } else {
             // Flash the blocker
             if let Some((entity, _)) = blocked_wall {
@@ -85,7 +100,20 @@ pub fn player_input(
             if let Some((entity, _, _)) = blocked_pushable {
                 flash_entity(&mut commands, entity);
             }
+            return;
         }
+    }
+
+    // Player moved to target — check for stairs
+    let on_stairs_down = stairs_down.iter().any(|gp| gp.0 == target);
+    let on_stairs_up = stairs_up.iter().any(|gp| gp.0 == target);
+
+    if on_stairs_down {
+        floor_transition.0 = Some(true);
+    } else if on_stairs_up {
+        floor_transition.0 = Some(false);
+    } else {
+        next_phase.set(TurnPhase::EnemyTurn);
     }
 }
 
@@ -237,25 +265,67 @@ pub fn apply_consequences(
 pub fn check_win(
     player_query: Query<&GridPos, With<Player>>,
     exit_query: Query<&GridPos, With<Exit>>,
-    enemy_query: Query<(), With<Enemy>>,
-    mut next_state: ResMut<NextState<GameState>>,
+    mut victory: ResMut<VictoryAchieved>,
 ) {
     let Ok(player_pos) = player_query.single() else {
         return;
     };
 
-    // Win: player on exit
     for exit_pos in exit_query.iter() {
         if player_pos.0 == exit_pos.0 {
-            next_state.set(GameState::Victory);
+            victory.0 = true;
             return;
         }
     }
+}
 
-    // Win: all enemies dead
-    if enemy_query.iter().count() == 0 {
-        next_state.set(GameState::Victory);
+pub fn handle_floor_transition(
+    mut commands: Commands,
+    mut transition: ResMut<FloorTransition>,
+    floor_entities: Query<Entity, With<FloorEntity>>,
+    mut player_query: Query<&mut GridPos, With<Player>>,
+    mut current_floor: ResMut<CurrentFloor>,
+) {
+    let Some(going_down) = transition.0.take() else {
+        return;
+    };
+
+    let new_floor = if going_down {
+        current_floor.0 + 1
+    } else {
+        current_floor.0.saturating_sub(1).max(1)
+    };
+
+    // Despawn all floor entities
+    for entity in floor_entities.iter() {
+        commands.entity(entity).despawn();
     }
+
+    // Spawn new floor
+    let result = crate::level::spawn_floor(&mut commands, new_floor);
+
+    // Reposition player: going down → appear at stairs up; going up → appear at stairs down
+    if let Ok(mut player_pos) = player_query.single_mut() {
+        if going_down {
+            if let Some(pos) = result.stairs_up_pos {
+                player_pos.0 = pos;
+            }
+        } else {
+            if let Some(pos) = result.stairs_down_pos {
+                player_pos.0 = pos;
+            }
+        }
+    }
+
+    current_floor.0 = new_floor;
+}
+
+pub fn reset_game_resources(
+    mut victory: ResMut<VictoryAchieved>,
+    mut floor: ResMut<CurrentFloor>,
+) {
+    victory.0 = false;
+    floor.0 = 0;
 }
 
 pub fn check_loss(

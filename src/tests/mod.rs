@@ -84,11 +84,11 @@ fn level_spawns_correct_entity_counts() {
     let w = game.app_mut().world_mut();
     let players = w.query_filtered::<(), With<Player>>().iter(w).count();
     let enemies = w.query_filtered::<(), With<Enemy>>().iter(w).count();
-    let exits = w.query_filtered::<(), With<Exit>>().iter(w).count();
+    let stairs_down = w.query_filtered::<(), With<StairsDown>>().iter(w).count();
 
     assert_eq!(players, 1, "should have exactly 1 player");
-    assert_eq!(enemies, 2, "should have exactly 2 goblins");
-    assert_eq!(exits, 1, "should have exactly 1 exit");
+    assert_eq!(enemies, 2, "floor 1 should have exactly 2 goblins");
+    assert_eq!(stairs_down, 1, "floor 1 should have exactly 1 stairs down");
 }
 
 #[test]
@@ -98,6 +98,16 @@ fn player_spawns_at_correct_position() {
         game.player_pos(),
         Some(IVec2::new(5, 10)),
         "player should be at (5, 10) in the level"
+    );
+}
+
+#[test]
+fn player_starts_with_5_hp() {
+    let mut game = GameHarness::new();
+    assert_eq!(
+        game.player_health(),
+        Some(5),
+        "player should start with 5 HP"
     );
 }
 
@@ -337,19 +347,18 @@ fn player_on_exit_wins() {
     let mut game = GameHarness::custom();
     game.spawn_player(IVec2::new(5, 5));
     game.spawn_exit(IVec2::new(5, 5));
-    game.spawn_enemy(IVec2::new(8, 8));
     game.enable_win_loss();
-    game.wait_until_state(GameState::Victory);
-}
-
-#[test]
-fn all_enemies_dead_wins() {
-    let mut game = GameHarness::custom();
-    game.spawn_player(IVec2::new(5, 5));
-    game.spawn_exit(IVec2::new(10, 10));
-    // No enemies spawned
-    game.enable_win_loss();
-    game.wait_until_state(GameState::Victory);
+    game.app_mut().update();
+    game.app_mut().update();
+    assert!(
+        game.victory_achieved(),
+        "player on exit should set VictoryAchieved"
+    );
+    assert_eq!(
+        game.game_state(),
+        GameState::Playing,
+        "game should stay in Playing state after victory"
+    );
 }
 
 #[test]
@@ -399,9 +408,46 @@ fn enemy_attacks_adjacent_player() {
 
     assert_eq!(
         game.player_health(),
-        Some(2),
+        Some(4),
         "enemy adjacent to player should deal 1 damage"
     );
+}
+
+#[test]
+fn player_melee_attacks_enemy() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    let enemy = game.spawn_enemy(IVec2::new(5, 4));
+
+    // Bump into enemy = melee attack
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert_eq!(
+        game.entity_health(enemy),
+        Some(1),
+        "enemy should take 1 damage from player melee"
+    );
+    assert_eq!(
+        game.player_pos(),
+        Some(IVec2::new(5, 5)),
+        "player should not move into enemy's tile"
+    );
+}
+
+#[test]
+fn player_melee_kills_enemy() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_enemy(IVec2::new(5, 4));
+
+    // Two melee attacks kill a 2 HP enemy
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert_eq!(game.enemy_count(), 0, "enemy should be dead after 2 hits");
 }
 
 // =========================================================================
@@ -531,5 +577,80 @@ fn fire_chain_damages_enemy() {
         game.entity_health(enemy),
         Some(1),
         "enemy should take 1 damage from adjacent fire chain"
+    );
+}
+
+// =========================================================================
+// Floor transitions
+// =========================================================================
+
+#[test]
+fn stairs_down_triggers_floor_transition() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_stairs_down(IVec2::new(5, 4));
+    game.app_mut().world_mut().resource_mut::<CurrentFloor>().0 = 1;
+
+    game.press_key(KeyCode::ArrowUp);
+    // Floor transition happens, player repositioned
+    game.app_mut().update(); // flush commands
+
+    assert_eq!(game.current_floor(), 2, "should be on floor 2");
+}
+
+#[test]
+fn stairs_up_triggers_floor_transition() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_stairs_up(IVec2::new(5, 4));
+    game.app_mut().world_mut().resource_mut::<CurrentFloor>().0 = 2;
+
+    game.press_key(KeyCode::ArrowUp);
+    game.app_mut().update(); // flush commands
+
+    assert_eq!(game.current_floor(), 1, "should be on floor 1");
+}
+
+#[test]
+fn health_persists_across_floors() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_stairs_down(IVec2::new(5, 4));
+    game.app_mut().world_mut().resource_mut::<CurrentFloor>().0 = 1;
+
+    // Damage player first
+    {
+        let w = game.app_mut().world_mut();
+        let mut q = w.query_filtered::<&mut Health, With<Player>>();
+        for mut h in q.iter_mut(w) {
+            h.0 = 3;
+        }
+    }
+
+    game.press_key(KeyCode::ArrowUp);
+    game.app_mut().update();
+
+    assert_eq!(
+        game.player_health(),
+        Some(3),
+        "health should persist across floor transitions"
+    );
+}
+
+#[test]
+fn victory_does_not_change_game_state() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_exit(IVec2::new(5, 5));
+    game.enable_win_loss();
+
+    game.app_mut().update();
+    game.app_mut().update();
+
+    assert!(game.victory_achieved(), "victory should be achieved");
+    assert_eq!(
+        game.game_state(),
+        GameState::Playing,
+        "game should remain in Playing state"
     );
 }

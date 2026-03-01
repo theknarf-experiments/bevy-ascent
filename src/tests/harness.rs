@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use crate::components::*;
 use crate::datalog::resolve_environment;
-use crate::level::spawn_level;
+use crate::level::spawn_initial_floor;
 use crate::systems::*;
 
 const MAX_FRAMES: usize = 100;
@@ -21,7 +21,7 @@ impl GameHarness {
             Update,
             (check_win, check_loss).run_if(in_state(GameState::Playing)),
         );
-        app.add_systems(OnEnter(GameState::Playing), spawn_level);
+        app.add_systems(OnEnter(GameState::Playing), spawn_initial_floor);
 
         // Initialize (MainMenu state)
         app.update();
@@ -29,7 +29,7 @@ impl GameHarness {
         app.world_mut()
             .resource_mut::<NextState<GameState>>()
             .set(GameState::Playing);
-        app.update(); // transition to Playing, OnEnter runs spawn_level
+        app.update(); // transition to Playing, OnEnter runs spawn_initial_floor
         app.update(); // flush spawn commands
 
         Self { app }
@@ -66,11 +66,20 @@ impl GameHarness {
         app.init_resource::<ButtonInput<KeyCode>>();
         app.init_state::<GameState>();
         app.add_sub_state::<TurnPhase>();
+        app.init_resource::<CurrentFloor>();
+        app.init_resource::<VictoryAchieved>();
+        app.init_resource::<FloorTransition>();
 
         // Turn-phase systems (same as main.rs, minus rendering and win/loss)
         app.add_systems(
             Update,
             player_input.run_if(in_state(TurnPhase::WaitingForInput)),
+        );
+        app.add_systems(
+            Update,
+            handle_floor_transition
+                .after(player_input)
+                .run_if(in_state(GameState::Playing)),
         );
         app.add_systems(
             Update,
@@ -204,6 +213,18 @@ impl GameHarness {
             .get()
     }
 
+    pub fn current_floor(&mut self) -> u32 {
+        self.app.world_mut().resource::<CurrentFloor>().0
+    }
+
+    pub fn victory_achieved(&mut self) -> bool {
+        self.app.world_mut().resource::<VictoryAchieved>().0
+    }
+
+    pub fn game_state(&mut self) -> GameState {
+        *self.app.world_mut().resource::<State<GameState>>().get()
+    }
+
     pub fn tags_at(&mut self, pos: IVec2) -> Vec<BTreeSet<Tag>> {
         let w = self.app.world_mut();
         let mut q = w.query::<(&GridPos, &Tags)>();
@@ -232,7 +253,7 @@ impl GameHarness {
                 Tags(BTreeSet::from([Tag::Flesh])),
                 DerivedTags::default(),
                 Player,
-                Health(3),
+                Health(5),
             ))
             .id()
     }
@@ -315,6 +336,20 @@ impl GameHarness {
         self.app
             .world_mut()
             .spawn((GridPos(pos), Exit))
+            .id()
+    }
+
+    pub fn spawn_stairs_down(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((GridPos(pos), StairsDown, FloorEntity))
+            .id()
+    }
+
+    pub fn spawn_stairs_up(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((GridPos(pos), StairsUp, FloorEntity))
             .id()
     }
 

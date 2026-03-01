@@ -12,7 +12,7 @@ use bevy::feathers::FeathersPlugins;
 
 use components::*;
 use datalog::resolve_environment;
-use level::spawn_level;
+use level::spawn_initial_floor;
 use render::*;
 use systems::*;
 use ui::*;
@@ -31,12 +31,18 @@ fn main() {
         .init_state::<GameState>()
         .add_sub_state::<TurnPhase>()
         .init_resource::<HoveredCell>()
+        .init_resource::<CurrentFloor>()
+        .init_resource::<VictoryAchieved>()
+        .init_resource::<FloorTransition>()
         // Global: camera persists across all states
         .add_systems(Startup, setup_camera)
         // Main Menu
         .add_systems(OnEnter(GameState::MainMenu), spawn_main_menu)
         // Playing
-        .add_systems(OnEnter(GameState::Playing), (spawn_level, spawn_tooltip))
+        .add_systems(
+            OnEnter(GameState::Playing),
+            (spawn_initial_floor, spawn_tooltip, spawn_floor_indicator, reset_game_resources),
+        )
         .add_systems(
             Update,
             (spawn_sprites, sync_transforms, sync_colors, tick_flash_timers)
@@ -44,12 +50,19 @@ fn main() {
         )
         .add_systems(
             Update,
-            update_tooltip.run_if(in_state(GameState::Playing)),
+            (update_tooltip, show_victory_banner, update_floor_indicator)
+                .run_if(in_state(GameState::Playing)),
         )
         // Turn phases
         .add_systems(
             Update,
             player_input.run_if(in_state(TurnPhase::WaitingForInput)),
+        )
+        .add_systems(
+            Update,
+            handle_floor_transition
+                .after(player_input)
+                .run_if(in_state(GameState::Playing)),
         )
         .add_systems(
             Update,
@@ -68,8 +81,7 @@ fn main() {
             Update,
             (check_win, check_loss).run_if(in_state(GameState::Playing)),
         )
-        // Victory / GameOver screens
-        .add_systems(OnEnter(GameState::Victory), spawn_victory_screen)
+        // GameOver screen
         .add_systems(OnEnter(GameState::GameOver), spawn_game_over_screen)
         // Global observers for hover tooltip
         .add_observer(on_hover_over)

@@ -23,6 +23,8 @@ pub fn glyph_for(
     pushable: Option<&Pushable>,
     blocking: Option<&Blocking>,
     tags: Option<&Tags>,
+    stairs_down: Option<&StairsDown>,
+    stairs_up: Option<&StairsUp>,
 ) -> &'static str {
     if player.is_some() {
         return "@";
@@ -32,6 +34,12 @@ pub fn glyph_for(
     }
     if exit.is_some() {
         return "E";
+    }
+    if stairs_down.is_some() {
+        return ">";
+    }
+    if stairs_up.is_some() {
+        return "<";
     }
     if let Some(tags) = tags {
         if tags.0.contains(&Tag::Stone) {
@@ -66,6 +74,8 @@ pub fn name_for(
     pushable: Option<&Pushable>,
     blocking: Option<&Blocking>,
     tags: Option<&Tags>,
+    stairs_down: Option<&StairsDown>,
+    stairs_up: Option<&StairsUp>,
 ) -> &'static str {
     if player.is_some() {
         return "Player";
@@ -75,6 +85,12 @@ pub fn name_for(
     }
     if exit.is_some() {
         return "Exit";
+    }
+    if stairs_down.is_some() {
+        return "Stairs Down";
+    }
+    if stairs_up.is_some() {
+        return "Stairs Up";
     }
     if let Some(tags) = tags {
         if tags.0.contains(&Tag::Stone) {
@@ -108,6 +124,8 @@ fn color_for(
     player: Option<&Player>,
     enemy: Option<&Enemy>,
     exit: Option<&Exit>,
+    stairs_down: Option<&StairsDown>,
+    stairs_up: Option<&StairsUp>,
 ) -> Color {
     // Check derived tags first for dynamic state
     if let Some(dt) = derived {
@@ -139,6 +157,9 @@ fn color_for(
     }
     if exit.is_some() {
         return Color::srgb(1.0, 1.0, 0.0); // yellow
+    }
+    if stairs_down.is_some() || stairs_up.is_some() {
+        return Color::srgb(0.3, 0.9, 0.9); // cyan
     }
 
     if let Some(tags) = tags {
@@ -179,15 +200,17 @@ pub fn spawn_sprites(
             Option<&Blocking>,
             Option<&Tags>,
             Option<&DerivedTags>,
+            Option<&StairsDown>,
+            Option<&StairsUp>,
         ),
         Without<HasSprite>,
     >,
 ) {
-    for (entity, grid_pos, player, enemy, exit, pushable, blocking, tags, derived) in
+    for (entity, grid_pos, player, enemy, exit, pushable, blocking, tags, derived, stairs_down, stairs_up) in
         query.iter()
     {
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags);
-        let color = color_for(tags, derived, player, enemy, exit);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up);
+        let color = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up);
         let x = grid_pos.0.x as f32 * CELL_SIZE;
         let y = -(grid_pos.0.y as f32) * CELL_SIZE;
 
@@ -230,17 +253,19 @@ pub fn sync_colors(
         Option<&Pushable>,
         Option<&Blocking>,
         Option<&FlashTimer>,
+        Option<&StairsDown>,
+        Option<&StairsUp>,
     )>,
 ) {
-    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking, flash) in
+    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking, flash, stairs_down, stairs_up) in
         query.iter_mut()
     {
         if flash.is_some() {
             text_color.0 = Color::WHITE;
         } else {
-            text_color.0 = color_for(tags, derived, player, enemy, exit);
+            text_color.0 = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up);
         }
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up);
         **text = glyph.to_string();
     }
 }
