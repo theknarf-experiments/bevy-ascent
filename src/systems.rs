@@ -2,8 +2,30 @@ use bevy::prelude::*;
 use std::collections::BTreeSet;
 
 use crate::components::*;
-use crate::items::spawn_item;
+use crate::items::{item_name, spawn_item};
 use crate::level_gen::GeneratedFloors;
+
+/// Return a display name for an enemy based on Boss marker and Tags.
+fn enemy_name(boss: Option<&Boss>, tags: Option<&Tags>) -> &'static str {
+    if boss.is_some() {
+        return "Dragon";
+    }
+    if let Some(tags) = tags {
+        if tags.0.contains(&Tag::OnFire) {
+            return "Fire Imp";
+        }
+        if tags.0.contains(&Tag::Ice) {
+            return "Ice Golem";
+        }
+        if tags.0.contains(&Tag::Poisoned) {
+            return "Poison Spider";
+        }
+        if tags.0.contains(&Tag::Electrified) {
+            return "Shock Eel";
+        }
+    }
+    "Goblin"
+}
 
 /// Simple deterministic hash from entity bits + salt for drop rolls.
 fn entity_hash(entity: Entity, salt: u32) -> u32 {
@@ -35,11 +57,12 @@ pub fn player_input(
     mut floor_transition: ResMut<FloorTransition>,
     mut player_moved: ResMut<PlayerMoved>,
     mut enemy_combat: Query<
-        (Entity, &GridPos, &mut Health, Option<&mut Tags>, Option<&DropTable>),
+        (Entity, &GridPos, &mut Health, Option<&mut Tags>, Option<&DropTable>, Option<&Boss>),
         (With<Enemy>, Without<Player>, Without<Pushable>, Without<Chest>, Without<Item>),
     >,
     weapon_query: Query<(&WeaponDamage, Option<&Tags>), (With<Item>, Without<Enemy>, Without<Player>)>,
     chest_query: Query<(Entity, &GridPos), (With<Chest>, Without<Player>, Without<Pushable>, Without<Enemy>, Without<Item>)>,
+    mut game_log: ResMut<GameLog>,
 ) {
     let dir = if keys.just_pressed(KeyCode::ArrowUp) {
         IVec2::new(0, -1)
@@ -60,9 +83,10 @@ pub fn player_input(
     let target = player_pos.0 + dir;
 
     // Check if there's an enemy at the target — melee attack
-    if let Some((enemy_entity, _, mut enemy_hp, mut enemy_tags, drop_table)) =
-        enemy_combat.iter_mut().find(|(_, gp, _, _, _)| gp.0 == target)
+    if let Some((enemy_entity, _, mut enemy_hp, mut enemy_tags, drop_table, boss)) =
+        enemy_combat.iter_mut().find(|(_, gp, _, _, _, _)| gp.0 == target)
     {
+        let name = enemy_name(boss, enemy_tags.as_deref());
         // Calculate damage: base 1 + weapon bonus
         let mut total_damage = 1;
         let mut weapon_tags_to_apply: Vec<Tag> = Vec::new();
@@ -91,6 +115,7 @@ pub fn player_input(
         }
 
         if enemy_hp.0 <= 0 {
+            game_log.push(format!("Killed {}!", name));
             // Enemy drops
             let drop_pos = target;
             if let Some(dt) = drop_table {
@@ -103,6 +128,8 @@ pub fn player_input(
                 }
             }
             commands.entity(enemy_entity).despawn();
+        } else {
+            game_log.push(format!("Hit {} for {} damage", name, total_damage));
         }
         next_phase.set(TurnPhase::EnemyTurn);
         return;
@@ -110,6 +137,7 @@ pub fn player_input(
 
     // Check if there's a chest at the target — open it
     if let Some((chest_entity, _)) = chest_query.iter().find(|(_, gp)| gp.0 == target) {
+        game_log.push("Opened a chest!");
         // Open chest: despawn and spawn items
         let chest_pos = target;
         let loot_count = 1 + (entity_hash(chest_entity, 0) % 2) as usize; // 1-2 items
@@ -140,7 +168,7 @@ pub fn player_input(
         let push_dest = target + dir;
         // Check push destination is free of all blocking (walls + other pushable-blocking + enemies)
         let dest_blocked_wall = blocking_query.iter().any(|(_, gp)| gp.0 == push_dest);
-        let dest_blocked_enemy = enemy_combat.iter().any(|(_, gp, _, _, _)| gp.0 == push_dest);
+        let dest_blocked_enemy = enemy_combat.iter().any(|(_, gp, _, _, _, _)| gp.0 == push_dest);
         let dest_blocked_pushable = pushable_query
             .iter()
             .any(|(e, pos, _)| e != push_entity && pos.0 == push_dest);
@@ -227,6 +255,7 @@ pub fn pickup_items(
     item_query: Query<(Entity, &GridPos, &ItemKind, Option<&Equippable>, Option<&Consumable>), (With<Item>, Without<Player>)>,
     mut gold_count: ResMut<GoldCount>,
     mut player_moved: ResMut<PlayerMoved>,
+    mut game_log: ResMut<GameLog>,
 ) {
     if !player_moved.0 {
         return;
@@ -246,11 +275,13 @@ pub fn pickup_items(
     for (entity, kind, equip_slot, is_consumable) in items_here {
         if kind == ItemKind::Gold {
             gold_count.0 += 1;
+            game_log.push("Picked up Gold");
             commands.entity(entity).despawn();
             continue;
         }
 
         if let Some(slot) = equip_slot {
+            game_log.push(format!("Equipped {}", item_name(&kind)));
             match slot {
                 EquipSlot::Weapon => {
                     if let Some(old_weapon) = inventory.weapon.take() {
@@ -281,6 +312,7 @@ pub fn pickup_items(
 
         if is_consumable {
             if inventory.consumables.len() < 4 {
+                game_log.push(format!("Picked up {}", item_name(&kind)));
                 inventory.consumables.push(entity);
                 commands.entity(entity).remove::<GridPos>();
                 commands.entity(entity).remove::<FloorEntity>();
@@ -296,6 +328,7 @@ pub fn use_consumable(
     mut commands: Commands,
     mut player_query: Query<(Entity, &mut Inventory, &mut Health, &mut Tags), (With<Player>, Without<Item>)>,
     item_kind_query: Query<&ItemKind, (With<Item>, Without<Player>)>,
+    mut game_log: ResMut<GameLog>,
 ) {
     let slot = if keys.just_pressed(KeyCode::Digit1) {
         Some(0)
@@ -329,12 +362,15 @@ pub fn use_consumable(
     match kind {
         ItemKind::HealthPotion => {
             health.0 = (health.0 + 3).min(10);
+            game_log.push("Used Health Potion (+3 HP)");
         }
         ItemKind::Antidote => {
             tags.0.remove(&Tag::Poisoned);
+            game_log.push("Used Antidote");
         }
         ItemKind::FireResistPotion => {
             commands.entity(player_entity).insert(FireResistBuff);
+            game_log.push("Used Fire Resist Potion");
         }
         _ => return,
     }
@@ -356,11 +392,13 @@ fn best_cardinal_direction(diff: IVec2) -> IVec2 {
 pub fn enemy_turn(
     mut commands: Commands,
     player_query: Query<(&GridPos, &Inventory), (With<Player>, Without<Enemy>)>,
-    mut enemy_query: Query<(Entity, &mut GridPos, &mut Health, Option<&Boss>), (With<Enemy>, Without<Player>)>,
+    mut enemy_query: Query<(Entity, &mut GridPos, &mut Health, Option<&Boss>, Option<&Tags>), (With<Enemy>, Without<Player>)>,
     mut player_health: Query<&mut Health, (With<Player>, Without<Enemy>)>,
     blocking_query: Query<(Entity, &GridPos, Option<&Tags>), (With<Blocking>, Without<Enemy>, Without<Player>)>,
     mut next_phase: ResMut<NextState<TurnPhase>>,
     armor_query: Query<&ArmorDefense, (With<Item>, Without<Player>, Without<Enemy>)>,
+    mut game_log: ResMut<GameLog>,
+    mut death_cause: ResMut<DeathCause>,
 ) {
     let Ok((player_pos, inventory)) = player_query.single() else {
         next_phase.set(TurnPhase::ResolveEnvironment);
@@ -387,7 +425,7 @@ pub fn enemy_turn(
     // Collect current enemy positions for collision avoidance
     let enemy_positions: Vec<(Entity, IVec2)> = enemy_query
         .iter()
-        .map(|(e, pos, _, _)| (e, pos.0))
+        .map(|(e, pos, _, _, _)| (e, pos.0))
         .collect();
 
     // Compute moves for each enemy
@@ -395,9 +433,10 @@ pub fn enemy_turn(
     // Fire breath positions to spawn after iteration
     let mut fire_spawns: Vec<IVec2> = Vec::new();
 
-    for (entity, pos, _, boss) in enemy_query.iter() {
+    for (entity, pos, _, boss, etags) in enemy_query.iter() {
         let epos = pos.0;
         let diff = player_tile - epos;
+        let name = enemy_name(boss, etags);
 
         // Boss AI: Dragon stays put, breathes fire or melee attacks
         if boss.is_some() {
@@ -406,9 +445,14 @@ pub fn enemy_turn(
                 if let Ok(mut ph) = player_health.single_mut() {
                     let dmg = (2 - armor_def).max(0);
                     ph.0 -= dmg;
+                    game_log.push(format!("{} hits you for {} damage", name, dmg));
+                    if ph.0 <= 0 {
+                        death_cause.0 = Some(format!("Slain by {}", name));
+                    }
                 }
             } else {
                 // Breathe fire in a line toward player (up to 3 tiles)
+                game_log.push("Dragon breathes fire!");
                 let dir = best_cardinal_direction(diff);
                 for i in 1..=3 {
                     let fire_pos = epos + dir * i;
@@ -428,6 +472,10 @@ pub fn enemy_turn(
             if let Ok(mut ph) = player_health.single_mut() {
                 let dmg = (1 - armor_def).max(0);
                 ph.0 -= dmg;
+                game_log.push(format!("{} hits you for {} damage", name, dmg));
+                if ph.0 <= 0 {
+                    death_cause.0 = Some(format!("Slain by {}", name));
+                }
             }
             continue;
         }
@@ -467,7 +515,7 @@ pub fn enemy_turn(
     }
 
     // Apply moves
-    for (mut_entity, mut pos, _, _) in enemy_query.iter_mut() {
+    for (mut_entity, mut pos, _, _, _) in enemy_query.iter_mut() {
         if let Some((_, to)) = moves.iter().find(|(e, _)| *e == mut_entity) {
             pos.0 = *to;
         }
@@ -489,26 +537,34 @@ pub fn enemy_turn(
 
 pub fn apply_consequences(
     mut commands: Commands,
-    mut health_query: Query<(Entity, &mut Health, &DerivedTags, Option<&DropTable>, Option<&GridPos>)>,
-    mut tags_query: Query<(Entity, &mut Tags, &DerivedTags, &GridPos)>,
+    mut health_query: Query<(Entity, &mut Health, &DerivedTags, Option<&DropTable>, Option<&GridPos>, Option<&Boss>)>,
+    mut tags_query: Query<(Entity, &mut Tags, &DerivedTags, &GridPos, Option<&Boss>)>,
     ice_query: Query<(Entity, &DerivedTags, &GridPos), With<Blocking>>,
     mut next_phase: ResMut<NextState<TurnPhase>>,
     player_inventory: Query<&Inventory, With<Player>>,
     armor_query: Query<&ArmorDefense, With<Item>>,
     player_query: Query<Entity, With<Player>>,
+    mut game_log: ResMut<GameLog>,
+    mut death_cause: ResMut<DeathCause>,
 ) {
+    // Pre-collect entity names for log messages (before mutable borrows)
+    let entity_names: Vec<(Entity, &'static str)> = tags_query
+        .iter()
+        .map(|(e, tags, _, _, boss)| (e, enemy_name(boss, Some(tags))))
+        .collect();
+
     // 1. Explosions first: collect explosion centers, then apply OnFire
     let exploding: Vec<(Entity, IVec2)> = tags_query
         .iter()
-        .filter(|(_, _, derived, _)| derived.0.contains(&Tag::Exploding))
-        .map(|(entity, _, _, pos)| (entity, pos.0))
+        .filter(|(_, _, derived, _, _)| derived.0.contains(&Tag::Exploding))
+        .map(|(entity, _, _, pos, _)| (entity, pos.0))
         .collect();
 
     if !exploding.is_empty() {
         // Collect all entities + positions that could be affected
         let all_positions: Vec<(Entity, IVec2)> = tags_query
             .iter()
-            .map(|(e, _, _, pos)| (e, pos.0))
+            .map(|(e, _, _, pos, _)| (e, pos.0))
             .collect();
 
         for (exploding_entity, explosion_pos) in &exploding {
@@ -520,7 +576,7 @@ pub fn apply_consequences(
                 let dist = (other_pos.x - explosion_pos.x).abs()
                     + (other_pos.y - explosion_pos.y).abs();
                 if dist <= 2 {
-                    if let Ok((_, mut tags, _, _)) = tags_query.get_mut(*other_entity) {
+                    if let Ok((_, mut tags, _, _, _)) = tags_query.get_mut(*other_entity) {
                         tags.0.insert(Tag::OnFire);
                     }
                 }
@@ -554,15 +610,18 @@ pub fn apply_consequences(
         .unwrap_or(0);
 
     // 3. All damage types → decrement Health (stacking)
-    for (entity, mut health, derived, drop_table, grid_pos) in health_query.iter_mut() {
+    for (entity, mut health, derived, drop_table, grid_pos, _boss) in health_query.iter_mut() {
+        let has_fire = derived.0.contains(&Tag::FireDamage);
+        let has_poison = derived.0.contains(&Tag::PoisonDamage);
+        let has_electric = derived.0.contains(&Tag::ElectricDamage);
         let mut dmg = 0;
-        if derived.0.contains(&Tag::FireDamage) {
+        if has_fire {
             dmg += 1;
         }
-        if derived.0.contains(&Tag::PoisonDamage) {
+        if has_poison {
             dmg += 1;
         }
-        if derived.0.contains(&Tag::ElectricDamage) {
+        if has_electric {
             dmg += 1;
         }
         if dmg > 0 {
@@ -570,9 +629,36 @@ pub fn apply_consequences(
             let is_player = player_entity.is_some_and(|pe| pe == entity);
             if is_player {
                 dmg = (dmg - armor_def).max(0);
+                if has_fire {
+                    game_log.push("You take fire damage!");
+                }
+                if has_poison {
+                    game_log.push("You take poison damage!");
+                }
+                if has_electric {
+                    game_log.push("You take electric damage!");
+                }
             }
             health.0 -= dmg;
             if health.0 <= 0 {
+                if is_player {
+                    if has_fire {
+                        death_cause.0 = Some("Burned to death".to_string());
+                    } else if has_poison {
+                        death_cause.0 = Some("Killed by poison".to_string());
+                    } else if has_electric {
+                        death_cause.0 = Some("Electrocuted".to_string());
+                    }
+                } else {
+                    let name = entity_names.iter().find(|(e, _)| *e == entity).map(|(_, n)| *n).unwrap_or("an enemy");
+                    if has_fire {
+                        game_log.push(format!("{} burns to death!", name));
+                    } else if has_poison {
+                        game_log.push(format!("{} succumbs to poison!", name));
+                    } else if has_electric {
+                        game_log.push(format!("{} is electrocuted!", name));
+                    }
+                }
                 // Drop loot if entity has a drop table
                 if let (Some(dt), Some(pos)) = (drop_table, grid_pos) {
                     let drop_pos = pos.0;
@@ -591,7 +677,7 @@ pub fn apply_consequences(
 
     // 4. Extinguished → remove OnFire from base Tags
     // 5. PoisonBurned → remove Poisoned from base Tags
-    for (_, mut tags, derived, _) in tags_query.iter_mut() {
+    for (_, mut tags, derived, _, _) in tags_query.iter_mut() {
         if derived.0.contains(&Tag::Extinguished) {
             tags.0.remove(&Tag::OnFire);
         }
@@ -628,6 +714,7 @@ pub fn handle_floor_transition(
     mut current_floor: ResMut<CurrentFloor>,
     generated: Res<GeneratedFloors>,
     mut fog_map: ResMut<FogMap>,
+    mut game_log: ResMut<GameLog>,
 ) {
     let Some(going_down) = transition.0.take() else {
         return;
@@ -665,6 +752,12 @@ pub fn handle_floor_transition(
     }
 
     current_floor.0 = new_floor;
+
+    if going_down {
+        game_log.push(format!("Descended to floor {}", new_floor));
+    } else {
+        game_log.push(format!("Ascended to floor {}", new_floor));
+    }
 }
 
 pub fn reset_game_resources(
@@ -672,18 +765,33 @@ pub fn reset_game_resources(
     mut floor: ResMut<CurrentFloor>,
     mut gold: ResMut<GoldCount>,
     mut fog_map: ResMut<FogMap>,
+    mut game_log: ResMut<GameLog>,
+    mut death_cause: ResMut<DeathCause>,
 ) {
     victory.0 = false;
     floor.0 = 0;
     gold.0 = 0;
     fog_map.reset();
+    game_log.clear();
+    death_cause.0 = None;
 }
 
 pub fn check_loss(
-    player_query: Query<(), With<Player>>,
+    mut commands: Commands,
+    player_query: Query<(Entity, &Health), With<Player>>,
     mut next_state: ResMut<NextState<GameState>>,
+    death_cause: Res<DeathCause>,
 ) {
-    if player_query.iter().count() == 0 {
+    let Ok((entity, health)) = player_query.single() else {
+        // Player entity already despawned
+        next_state.set(GameState::GameOver);
+        return;
+    };
+    if health.0 <= 0 {
+        commands.entity(entity).despawn();
+        if death_cause.0.is_none() {
+            // Fallback handled by game over screen
+        }
         next_state.set(GameState::GameOver);
     }
 }

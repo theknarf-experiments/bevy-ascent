@@ -115,6 +115,31 @@ pub struct FireResistBuff;
 #[derive(Resource, Default)]
 pub struct GoldCount(pub u32);
 
+// ---- Game Log & Death Cause ----
+
+#[derive(Resource, Default)]
+pub struct GameLog {
+    pub entries: Vec<String>,
+}
+
+impl GameLog {
+    pub fn push(&mut self, msg: impl Into<String>) {
+        self.entries.push(msg.into());
+    }
+
+    pub fn recent(&self, n: usize) -> &[String] {
+        let start = self.entries.len().saturating_sub(n);
+        &self.entries[start..]
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct DeathCause(pub Option<String>);
+
 // ---- UI markers ----
 
 #[derive(Component)]
@@ -128,6 +153,9 @@ pub struct StatsConsumablesText;
 
 #[derive(Component)]
 pub struct StatsGoldText;
+
+#[derive(Component)]
+pub struct StatsLogText;
 
 // ---- Fog of War ----
 

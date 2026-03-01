@@ -182,7 +182,11 @@ pub fn show_victory_banner(
 
 // ---- Game Over Screen ----
 
-pub fn spawn_game_over_screen(mut commands: Commands) {
+pub fn spawn_game_over_screen(mut commands: Commands, death_cause: Res<DeathCause>) {
+    let cause_text = death_cause
+        .0
+        .as_deref()
+        .unwrap_or("You perished in the dungeon.");
     commands
         .spawn((
             Node {
@@ -208,7 +212,7 @@ pub fn spawn_game_over_screen(mut commands: Commands) {
             ));
 
             parent.spawn((
-                Text::new("You perished in the dungeon."),
+                Text::new(cause_text.to_string()),
                 TextFont {
                     font_size: 20.0,
                     ..default()
@@ -559,6 +563,29 @@ pub fn spawn_stats_panel(mut commands: Commands, floor: Res<CurrentFloor>) {
                 TextColor(Color::srgb(0.7, 0.7, 0.7)),
                 Pickable::IGNORE,
             ));
+
+            // Log header
+            parent.spawn((
+                Text::new("--- Log ---"),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.5, 0.5, 0.5)),
+                Pickable::IGNORE,
+            ));
+
+            // Log entries
+            parent.spawn((
+                StatsLogText,
+                Text::new(""),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                Pickable::IGNORE,
+            ));
         });
 }
 
@@ -566,29 +593,34 @@ pub fn update_stats_panel(
     player_query: Query<(&Health, &Inventory), With<Player>>,
     floor: Res<CurrentFloor>,
     gold: Res<GoldCount>,
+    game_log: Res<GameLog>,
     mut hp_text: Query<
         &mut Text,
-        (With<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+        (With<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>, Without<StatsLogText>),
     >,
     mut floor_text: Query<
         &mut Text,
-        (With<StatsFloorText>, Without<StatsHpText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+        (With<StatsFloorText>, Without<StatsHpText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>, Without<StatsLogText>),
     >,
     mut gold_text: Query<
         &mut Text,
-        (With<StatsGoldText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+        (With<StatsGoldText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>, Without<StatsLogText>),
     >,
     mut weapon_text: Query<
         &mut Text,
-        (With<StatsWeaponText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+        (With<StatsWeaponText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsArmorText>, Without<StatsConsumablesText>, Without<StatsLogText>),
     >,
     mut armor_text: Query<
         &mut Text,
-        (With<StatsArmorText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsConsumablesText>),
+        (With<StatsArmorText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsConsumablesText>, Without<StatsLogText>),
     >,
     mut consumables_text: Query<
         &mut Text,
-        (With<StatsConsumablesText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>),
+        (With<StatsConsumablesText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsLogText>),
+    >,
+    mut log_text: Query<
+        &mut Text,
+        (With<StatsLogText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
     >,
     item_query: Query<(&ItemKind, Option<&WeaponDamage>, Option<&ArmorDefense>), With<Item>>,
 ) {
@@ -650,6 +682,12 @@ pub fn update_stats_panel(
 
     for mut text in gold_text.iter_mut() {
         **text = format!("Gold: {}", gold.0);
+    }
+
+    // Update log
+    for mut text in log_text.iter_mut() {
+        let recent: Vec<&str> = game_log.recent(8).iter().rev().map(|s| s.as_str()).collect();
+        **text = recent.join("\n");
     }
 }
 

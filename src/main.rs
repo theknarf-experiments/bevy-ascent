@@ -44,6 +44,8 @@ fn main() {
         .init_resource::<GoldCount>()
         .init_resource::<PlayerMoved>()
         .init_resource::<FogMap>()
+        .init_resource::<GameLog>()
+        .init_resource::<DeathCause>()
         // Global: camera persists across all states
         .add_systems(Startup, setup_camera)
         // Main Menu

@@ -77,6 +77,8 @@ impl GameHarness {
         app.init_resource::<GoldCount>();
         app.init_resource::<PlayerMoved>();
         app.init_resource::<FogMap>();
+        app.init_resource::<GameLog>();
+        app.init_resource::<DeathCause>();
         app.insert_resource(fallback_floors());
 
         // Turn-phase systems (same as main.rs, minus rendering and win/loss)
