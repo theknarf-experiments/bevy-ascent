@@ -31,15 +31,21 @@ fn main() {
         }))
         .add_plugins(FeathersPlugins)
         .init_state::<GameState>()
+        .init_state::<MenuOverlay>()
         .add_sub_state::<TurnPhase>()
         .init_resource::<HoveredCell>()
         .init_resource::<CurrentFloor>()
         .init_resource::<VictoryAchieved>()
         .init_resource::<FloorTransition>()
+        .init_resource::<SettingsOrigin>()
         // Global: camera persists across all states
         .add_systems(Startup, setup_camera)
         // Main Menu
         .add_systems(OnEnter(GameState::MainMenu), spawn_main_menu)
+        // Menu overlays
+        .add_systems(OnEnter(MenuOverlay::Paused), spawn_pause_menu)
+        .add_systems(OnEnter(MenuOverlay::Settings), spawn_settings_menu)
+        .add_systems(Update, handle_esc_key)
         // Playing
         .add_systems(
             OnEnter(GameState::Playing),
@@ -59,33 +65,44 @@ fn main() {
             (update_tooltip, show_victory_banner, update_floor_indicator)
                 .run_if(in_state(GameState::Playing)),
         )
-        // Turn phases
+        // Turn phases (frozen while menu overlay is active)
         .add_systems(
             Update,
-            player_input.run_if(in_state(TurnPhase::WaitingForInput)),
+            player_input
+                .run_if(in_state(TurnPhase::WaitingForInput))
+                .run_if(in_state(MenuOverlay::None)),
         )
         .add_systems(
             Update,
             handle_floor_transition
                 .after(player_input)
-                .run_if(in_state(GameState::Playing)),
+                .run_if(in_state(GameState::Playing))
+                .run_if(in_state(MenuOverlay::None)),
         )
         .add_systems(
             Update,
-            enemy_turn.run_if(in_state(TurnPhase::EnemyTurn)),
+            enemy_turn
+                .run_if(in_state(TurnPhase::EnemyTurn))
+                .run_if(in_state(MenuOverlay::None)),
         )
         .add_systems(
             Update,
-            resolve_environment.run_if(in_state(TurnPhase::ResolveEnvironment)),
+            resolve_environment
+                .run_if(in_state(TurnPhase::ResolveEnvironment))
+                .run_if(in_state(MenuOverlay::None)),
         )
         .add_systems(
             Update,
-            apply_consequences.run_if(in_state(TurnPhase::ApplyConsequences)),
+            apply_consequences
+                .run_if(in_state(TurnPhase::ApplyConsequences))
+                .run_if(in_state(MenuOverlay::None)),
         )
-        // Win/loss checks (every frame while playing)
+        // Win/loss checks (every frame while playing, frozen while paused)
         .add_systems(
             Update,
-            (check_win, check_loss).run_if(in_state(GameState::Playing)),
+            (check_win, check_loss)
+                .run_if(in_state(GameState::Playing))
+                .run_if(in_state(MenuOverlay::None)),
         )
         // GameOver screen
         .add_systems(OnEnter(GameState::GameOver), spawn_game_over_screen)

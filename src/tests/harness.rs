@@ -70,6 +70,8 @@ impl GameHarness {
         app.init_resource::<CurrentFloor>();
         app.init_resource::<VictoryAchieved>();
         app.init_resource::<FloorTransition>();
+        app.init_state::<MenuOverlay>();
+        app.init_resource::<SettingsOrigin>();
         app.insert_resource(fallback_floors());
 
         // Turn-phase systems (same as main.rs, minus rendering and win/loss)

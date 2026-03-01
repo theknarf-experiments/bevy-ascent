@@ -86,6 +86,29 @@ pub struct FlashTimer(pub Timer);
 #[derive(Component)]
 pub struct TooltipRoot;
 
+#[derive(States, Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
+pub enum MenuOverlay {
+    #[default]
+    None,
+    Paused,
+    Settings,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingsFrom {
+    MainMenu,
+    Paused,
+}
+
+#[derive(Resource)]
+pub struct SettingsOrigin(pub SettingsFrom);
+
+impl Default for SettingsOrigin {
+    fn default() -> Self {
+        Self(SettingsFrom::MainMenu)
+    }
+}
+
 #[derive(SubStates, Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 #[source(GameState = GameState::Playing)]
 pub enum TurnPhase {
