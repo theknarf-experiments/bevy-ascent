@@ -334,6 +334,10 @@ pub fn update_tooltip(
                     Tag::Ice => Some("Ice"),
                     Tag::OnFire => Some("OnFire"),
                     Tag::Wet => Some("Wet"),
+                    Tag::Metal => Some("Metal"),
+                    Tag::Poisoned => Some("Poisoned"),
+                    Tag::Electrified => Some("Electrified"),
+                    Tag::Explosive => Some("Explosive"),
                     _ => None,
                 })
                 .collect();

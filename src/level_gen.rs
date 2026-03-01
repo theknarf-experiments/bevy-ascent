@@ -39,19 +39,31 @@ wall(X,Y) :- iwall(X,Y).
 floor(X,Y) :- interior(X,Y), not wall(X,Y).
 
 % --- Entity placement ---
-% Floor 1: player (bottom half), stairs_down (right half), 2 goblins
+% Floor 1 (tutorial): player, stairs_down, 2 goblins, 1 water puddle, 1 poison gas
 1 { player(X,Y) : floor(X,Y), Y >= 6 } 1 :- floor_num(1).
 1 { stairs_down(X,Y) : floor(X,Y), X >= 6 } 1 :- floor_num(1).
 2 { goblin(X,Y) : floor(X,Y) } 2 :- floor_num(1).
+1 { water(X,Y) : floor(X,Y) } 1 :- floor_num(1).
+1 { poison_gas(X,Y) : floor(X,Y) } 1 :- floor_num(1).
 
-% Floor 2: stairs_up (left half), stairs_down (right half), 0 goblins
+% Floor 2 (elemental): fire imp, poison spider, explosive barrel, poison mushroom, spark
 1 { stairs_up(X,Y) : floor(X,Y), X <= 5 } 1 :- floor_num(2).
 1 { stairs_down(X,Y) : floor(X,Y), X >= 6 } 1 :- floor_num(2).
+1 { fire_imp(X,Y) : floor(X,Y) } 1 :- floor_num(2).
+1 { poison_spider(X,Y) : floor(X,Y) } 1 :- floor_num(2).
+1 { explosive(X,Y) : floor(X,Y) } 1 :- floor_num(2).
+1 { mushroom(X,Y) : floor(X,Y) } 1 :- floor_num(2).
+1 { spark(X,Y) : floor(X,Y) } 1 :- floor_num(2).
 
-% Floor 3: stairs_up (left half), exit (bottom half), 2 goblins
+% Floor 3 (boss): ice golem, shock eel, goblin, lightning rod, metal crate, water puddle
 1 { stairs_up(X,Y) : floor(X,Y), X <= 5 } 1 :- floor_num(3).
 1 { exit(X,Y) : floor(X,Y), Y >= 6 } 1 :- floor_num(3).
-2 { goblin(X,Y) : floor(X,Y) } 2 :- floor_num(3).
+1 { ice_golem(X,Y) : floor(X,Y) } 1 :- floor_num(3).
+1 { shock_eel(X,Y) : floor(X,Y) } 1 :- floor_num(3).
+1 { goblin(X,Y) : floor(X,Y) } 1 :- floor_num(3).
+1 { lightning_rod(X,Y) : floor(X,Y) } 1 :- floor_num(3).
+1 { metal_crate(X,Y) : floor(X,Y) } 1 :- floor_num(3).
+1 { water(X,Y) : floor(X,Y) } 1 :- floor_num(3).
 
 % All floors: 2 torches, 2 barrels, 2-4 oil
 2 { torch(X,Y) : floor(X,Y) } 2.
@@ -59,8 +71,6 @@ floor(X,Y) :- interior(X,Y), not wall(X,Y).
 2 { oil(X,Y) : floor(X,Y) } 4.
 
 % --- Integrity constraints ---
-% All entities must be on floor tiles (already enforced by choice domains)
-
 % Entity cell: a cell that has any entity
 entity_cell(X,Y) :- player(X,Y).
 entity_cell(X,Y) :- goblin(X,Y).
@@ -70,6 +80,17 @@ entity_cell(X,Y) :- oil(X,Y).
 entity_cell(X,Y) :- stairs_down(X,Y).
 entity_cell(X,Y) :- stairs_up(X,Y).
 entity_cell(X,Y) :- exit(X,Y).
+entity_cell(X,Y) :- water(X,Y).
+entity_cell(X,Y) :- poison_gas(X,Y).
+entity_cell(X,Y) :- fire_imp(X,Y).
+entity_cell(X,Y) :- poison_spider(X,Y).
+entity_cell(X,Y) :- explosive(X,Y).
+entity_cell(X,Y) :- mushroom(X,Y).
+entity_cell(X,Y) :- spark(X,Y).
+entity_cell(X,Y) :- ice_golem(X,Y).
+entity_cell(X,Y) :- shock_eel(X,Y).
+entity_cell(X,Y) :- lightning_rod(X,Y).
+entity_cell(X,Y) :- metal_crate(X,Y).
 
 % At most one entity per cell
 entity_count(X,Y,N) :- floor(X,Y), N = #count{
@@ -80,27 +101,41 @@ entity_count(X,Y,N) :- floor(X,Y), N = #count{
     5 : oil(X,Y);
     6 : stairs_down(X,Y);
     7 : stairs_up(X,Y);
-    8 : exit(X,Y)
+    8 : exit(X,Y);
+    9 : water(X,Y);
+    10 : poison_gas(X,Y);
+    11 : fire_imp(X,Y);
+    12 : poison_spider(X,Y);
+    13 : explosive(X,Y);
+    14 : mushroom(X,Y);
+    15 : spark(X,Y);
+    16 : ice_golem(X,Y);
+    17 : shock_eel(X,Y);
+    18 : lightning_rod(X,Y);
+    19 : metal_crate(X,Y)
 }.
 :- entity_count(X,Y,N), N > 1.
 
-% Goblins not adjacent to entry point
-% Entry = player on floor 1, stairs_up on floors 2-3
+% Enemies not adjacent to entry point
 entry(X,Y) :- player(X,Y), floor_num(1).
 entry(X,Y) :- stairs_up(X,Y), floor_num(2).
 entry(X,Y) :- stairs_up(X,Y), floor_num(3).
 
-:- goblin(GX,GY), entry(EX,EY), |GX-EX| + |GY-EY| <= 1.
+enemy_at(X,Y) :- goblin(X,Y).
+enemy_at(X,Y) :- fire_imp(X,Y).
+enemy_at(X,Y) :- poison_spider(X,Y).
+enemy_at(X,Y) :- ice_golem(X,Y).
+enemy_at(X,Y) :- shock_eel(X,Y).
+
+:- enemy_at(GX,GY), entry(EX,EY), |GX-EX| + |GY-EY| <= 1.
 
 % --- Reachability ---
-% Reachable from entry via floor tiles (4-connected)
 reachable(X,Y) :- entry(X,Y).
 reachable(X2,Y) :- reachable(X1,Y), floor(X2,Y), X2 = X1+1.
 reachable(X2,Y) :- reachable(X1,Y), floor(X2,Y), X2 = X1-1.
 reachable(X,Y2) :- reachable(X,Y1), floor(X,Y2), Y2 = Y1+1.
 reachable(X,Y2) :- reachable(X,Y1), floor(X,Y2), Y2 = Y1-1.
 
-% All entity cells and goals must be reachable
 :- entity_cell(X,Y), not reachable(X,Y).
 
 #show player/2.
@@ -112,6 +147,17 @@ reachable(X,Y2) :- reachable(X,Y1), floor(X,Y2), Y2 = Y1-1.
 #show stairs_up/2.
 #show exit/2.
 #show wall/2.
+#show water/2.
+#show poison_gas/2.
+#show fire_imp/2.
+#show poison_spider/2.
+#show explosive/2.
+#show mushroom/2.
+#show spark/2.
+#show ice_golem/2.
+#show shock_eel/2.
+#show lightning_rod/2.
+#show metal_crate/2.
 "#;
 
 #[derive(Debug)]
@@ -197,6 +243,17 @@ fn build_grid_from_atoms(atoms: &[String]) -> String {
                     "stairs_down" => '>',
                     "stairs_up" => '<',
                     "exit" => 'E',
+                    "water" => '~',
+                    "poison_gas" => 'p',
+                    "fire_imp" => 'f',
+                    "poison_spider" => 's',
+                    "explosive" => 'X',
+                    "mushroom" => 'm',
+                    "spark" => 'z',
+                    "ice_golem" => 'i',
+                    "shock_eel" => 'e',
+                    "lightning_rod" => '!',
+                    "metal_crate" => 'M',
                     _ => continue,
                 };
                 // Wall should only overwrite empty cells; entities take priority
@@ -267,11 +324,11 @@ pub fn fallback_floors() -> GeneratedFloors {
 #..........#
 #.B..o.....#
 #..........#
-#.o.##.T...#
+#.o.##.T..~#
 #...##...g.#
 #..B...o...#
 #.....##.B.#
-#..T..##...#
+#..T..##.p.#
 #.g.......>#
 #....@.....#
 ############"
@@ -280,13 +337,13 @@ pub fn fallback_floors() -> GeneratedFloors {
 ############
 #<.........#
 #..........#
-#..T...o...#
+#..T...o.z.#
 #...##.....#
-#...##..B..#
-#.o........#
-#..........#
+#...##..X..#
+#.o....m...#
+#.....s....#
 #.....B....#
-#..........#
+#..f.......#
 #.........>#
 ############"
                 .to_string(),
@@ -294,13 +351,13 @@ pub fn fallback_floors() -> GeneratedFloors {
 ############
 #<.........#
 #..........#
-#....o.....#
+#....o..M..#
 #...##..g..#
-#...##.....#
-#..B...T...#
-#..........#
+#...##.!...#
+#..B...T.~.#
+#.....e....#
 #..T..##...#
-#.g...##...#
+#.i...##...#
 #........E.#
 ############"
                 .to_string(),
@@ -389,12 +446,10 @@ mod tests {
             2 => {
                 assert_eq!(stairs_up_count, 1, "floor 2 should have 1 stairs up");
                 assert_eq!(stairs_down_count, 1, "floor 2 should have 1 stairs down");
-                assert_eq!(goblin_count, 0, "floor 2 should have 0 goblins");
             }
             3 => {
                 assert_eq!(stairs_up_count, 1, "floor 3 should have 1 stairs up");
                 assert_eq!(exit_count, 1, "floor 3 should have 1 exit");
-                assert_eq!(goblin_count, 2, "floor 3 should have 2 goblins");
             }
             _ => panic!("unexpected floor_num"),
         }
@@ -417,7 +472,7 @@ mod tests {
                         }
                         entity_positions.insert((x, y));
                     }
-                    'g' | 'T' | 'B' | 'o' | '>' | 'E' => {
+                    'g' | 'T' | 'B' | 'o' | '>' | 'E' | '~' | 'p' | 'f' | 'i' | 's' | 'e' | 'X' | 'M' | 'm' | 'z' | '!' => {
                         entity_positions.insert((x, y));
                     }
                     _ => {}

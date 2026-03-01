@@ -221,12 +221,42 @@ pub fn enemy_turn(
 pub fn apply_consequences(
     mut commands: Commands,
     mut health_query: Query<(Entity, &mut Health, &DerivedTags)>,
-    mut tags_query: Query<(Entity, &mut Tags, &DerivedTags)>,
+    mut tags_query: Query<(Entity, &mut Tags, &DerivedTags, &GridPos)>,
     ice_query: Query<(Entity, &DerivedTags, &GridPos), With<Blocking>>,
     mut next_phase: ResMut<NextState<TurnPhase>>,
 ) {
-    // Melted → despawn ice, spawn water at same position
-    // (do this first so we don't conflict with health despawns)
+    // 1. Explosions first: collect explosion centers, then apply OnFire
+    let exploding: Vec<(Entity, IVec2)> = tags_query
+        .iter()
+        .filter(|(_, _, derived, _)| derived.0.contains(&Tag::Exploding))
+        .map(|(entity, _, _, pos)| (entity, pos.0))
+        .collect();
+
+    if !exploding.is_empty() {
+        // Collect all entities + positions that could be affected
+        let all_positions: Vec<(Entity, IVec2)> = tags_query
+            .iter()
+            .map(|(e, _, _, pos)| (e, pos.0))
+            .collect();
+
+        for (exploding_entity, explosion_pos) in &exploding {
+            commands.entity(*exploding_entity).despawn();
+            for (other_entity, other_pos) in &all_positions {
+                if *other_entity == *exploding_entity {
+                    continue;
+                }
+                let dist = (other_pos.x - explosion_pos.x).abs()
+                    + (other_pos.y - explosion_pos.y).abs();
+                if dist <= 2 {
+                    if let Ok((_, mut tags, _, _)) = tags_query.get_mut(*other_entity) {
+                        tags.0.insert(Tag::OnFire);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Melted → despawn ice, spawn water at same position
     let melted: Vec<(Entity, IVec2)> = ice_query
         .iter()
         .filter(|(_, derived, _)| derived.0.contains(&Tag::Melted))
@@ -243,20 +273,34 @@ pub fn apply_consequences(
         ));
     }
 
-    // TakingDamage → decrement Health
+    // 3. All damage types → decrement Health (stacking)
     for (entity, mut health, derived) in health_query.iter_mut() {
-        if derived.0.contains(&Tag::TakingDamage) {
-            health.0 -= 1;
+        let mut dmg = 0;
+        if derived.0.contains(&Tag::FireDamage) {
+            dmg += 1;
+        }
+        if derived.0.contains(&Tag::PoisonDamage) {
+            dmg += 1;
+        }
+        if derived.0.contains(&Tag::ElectricDamage) {
+            dmg += 1;
+        }
+        if dmg > 0 {
+            health.0 -= dmg;
             if health.0 <= 0 {
                 commands.entity(entity).despawn();
             }
         }
     }
 
-    // Extinguished → remove OnFire from base Tags
-    for (_, mut tags, derived) in tags_query.iter_mut() {
+    // 4. Extinguished → remove OnFire from base Tags
+    // 5. PoisonBurned → remove Poisoned from base Tags
+    for (_, mut tags, derived, _) in tags_query.iter_mut() {
         if derived.0.contains(&Tag::Extinguished) {
             tags.0.remove(&Tag::OnFire);
+        }
+        if derived.0.contains(&Tag::PoisonBurned) {
+            tags.0.remove(&Tag::Poisoned);
         }
     }
 

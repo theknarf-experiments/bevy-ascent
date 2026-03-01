@@ -9,16 +9,25 @@ pub enum Tag {
     Ice,
     Flesh,
     Stone,
+    Metal,
 
     // States (base or derived)
     OnFire,
     Wet,
+    Poisoned,
+    Electrified,
+    Explosive,
 
     // Derived only
     Flammable,
     Melted,
-    TakingDamage,
+    FireDamage,
+    PoisonDamage,
+    ElectricDamage,
     Extinguished,
+    Conductive,
+    PoisonBurned,
+    Exploding,
 }
 
 #[derive(Component, Clone, Debug)]

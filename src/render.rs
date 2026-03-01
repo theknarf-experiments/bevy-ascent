@@ -29,8 +29,23 @@ pub fn glyph_for(
     if player.is_some() {
         return "@";
     }
+    // Enemy subtypes based on tags
     if enemy.is_some() {
-        return "g";
+        if let Some(tags) = tags {
+            if tags.0.contains(&Tag::OnFire) {
+                return "f"; // Fire Imp
+            }
+            if tags.0.contains(&Tag::Ice) {
+                return "i"; // Ice Golem
+            }
+            if tags.0.contains(&Tag::Poisoned) {
+                return "s"; // Poison Spider
+            }
+            if tags.0.contains(&Tag::Electrified) {
+                return "e"; // Shock Eel
+            }
+        }
+        return "g"; // Goblin (default)
     }
     if exit.is_some() {
         return "E";
@@ -45,11 +60,26 @@ pub fn glyph_for(
         if tags.0.contains(&Tag::Stone) {
             return "#";
         }
+        if tags.0.contains(&Tag::Explosive) {
+            return "X"; // Explosive Barrel
+        }
+        if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) && blocking.is_some() {
+            return "!"; // Lightning Rod
+        }
+        if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) {
+            return "z"; // Spark
+        }
+        if tags.0.contains(&Tag::Metal) && pushable.is_some() {
+            return "M"; // Metal Crate
+        }
         if tags.0.contains(&Tag::Ice) {
             return "I";
         }
         if tags.0.contains(&Tag::Oil) {
             return "o";
+        }
+        if tags.0.contains(&Tag::Wood) && tags.0.contains(&Tag::Poisoned) {
+            return "m"; // Poison Mushroom
         }
         if tags.0.contains(&Tag::Wood) {
             if tags.0.contains(&Tag::OnFire) && pushable.is_some() && blocking.is_none() {
@@ -60,7 +90,10 @@ pub fn glyph_for(
             }
             return "T";
         }
-        if tags.0.contains(&Tag::Wet) && !tags.0.contains(&Tag::Flesh) {
+        if tags.0.contains(&Tag::Poisoned) && !tags.0.contains(&Tag::Flesh) {
+            return "p"; // Poison Gas
+        }
+        if tags.0.contains(&Tag::Wet) && !tags.0.contains(&Tag::Flesh) && !tags.0.contains(&Tag::Ice) {
             return "~";
         }
     }
@@ -81,6 +114,20 @@ pub fn name_for(
         return "Player";
     }
     if enemy.is_some() {
+        if let Some(tags) = tags {
+            if tags.0.contains(&Tag::OnFire) {
+                return "Fire Imp";
+            }
+            if tags.0.contains(&Tag::Ice) {
+                return "Ice Golem";
+            }
+            if tags.0.contains(&Tag::Poisoned) {
+                return "Poison Spider";
+            }
+            if tags.0.contains(&Tag::Electrified) {
+                return "Shock Eel";
+            }
+        }
         return "Goblin";
     }
     if exit.is_some() {
@@ -96,11 +143,26 @@ pub fn name_for(
         if tags.0.contains(&Tag::Stone) {
             return "Wall";
         }
+        if tags.0.contains(&Tag::Explosive) {
+            return "Explosive Barrel";
+        }
+        if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) && blocking.is_some() {
+            return "Lightning Rod";
+        }
+        if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) {
+            return "Spark";
+        }
+        if tags.0.contains(&Tag::Metal) && pushable.is_some() {
+            return "Metal Crate";
+        }
         if tags.0.contains(&Tag::Ice) {
             return "Ice";
         }
         if tags.0.contains(&Tag::Oil) {
             return "Oil";
+        }
+        if tags.0.contains(&Tag::Wood) && tags.0.contains(&Tag::Poisoned) {
+            return "Poison Mushroom";
         }
         if tags.0.contains(&Tag::Wood) {
             if tags.0.contains(&Tag::OnFire) && pushable.is_some() && blocking.is_none() {
@@ -111,7 +173,10 @@ pub fn name_for(
             }
             return "Torch";
         }
-        if tags.0.contains(&Tag::Wet) && !tags.0.contains(&Tag::Flesh) {
+        if tags.0.contains(&Tag::Poisoned) && !tags.0.contains(&Tag::Flesh) {
+            return "Poison Gas";
+        }
+        if tags.0.contains(&Tag::Wet) && !tags.0.contains(&Tag::Flesh) && !tags.0.contains(&Tag::Ice) {
             return "Water";
         }
     }
@@ -129,8 +194,17 @@ fn color_for(
 ) -> Color {
     // Check derived tags first for dynamic state
     if let Some(dt) = derived {
-        if dt.0.contains(&Tag::TakingDamage) {
-            return Color::srgb(1.0, 0.2, 0.2); // bright red
+        if dt.0.contains(&Tag::FireDamage) || dt.0.contains(&Tag::PoisonDamage) || dt.0.contains(&Tag::ElectricDamage) {
+            return Color::srgb(1.0, 0.2, 0.2); // bright red (any damage)
+        }
+        if dt.0.contains(&Tag::Exploding) {
+            return Color::srgb(1.0, 0.4, 0.1); // orange-red
+        }
+        if dt.0.contains(&Tag::Electrified) {
+            return Color::srgb(0.3, 0.8, 1.0); // electric blue
+        }
+        if dt.0.contains(&Tag::Poisoned) {
+            return Color::srgb(0.2, 0.7, 0.1); // green
         }
         if dt.0.contains(&Tag::OnFire) {
             return Color::srgb(1.0, 0.6, 0.0); // orange
@@ -147,12 +221,26 @@ fn color_for(
         if tags.0.contains(&Tag::OnFire) {
             return Color::srgb(1.0, 0.6, 0.0); // orange
         }
+        if tags.0.contains(&Tag::Electrified) {
+            return Color::srgb(0.3, 0.8, 1.0); // electric blue
+        }
+        if tags.0.contains(&Tag::Poisoned) && !tags.0.contains(&Tag::Flesh) {
+            return Color::srgb(0.2, 0.7, 0.1); // green
+        }
+        if tags.0.contains(&Tag::Explosive) {
+            return Color::srgb(1.0, 0.4, 0.1); // orange-red
+        }
     }
 
     if player.is_some() {
         return Color::srgb(0.2, 1.0, 0.2); // bright green
     }
     if enemy.is_some() {
+        if let Some(tags) = tags {
+            if tags.0.contains(&Tag::Poisoned) {
+                return Color::srgb(0.5, 1.0, 0.2); // bright green
+            }
+        }
         return Color::srgb(1.0, 0.3, 0.3); // red
     }
     if exit.is_some() {
@@ -165,6 +253,9 @@ fn color_for(
     if let Some(tags) = tags {
         if tags.0.contains(&Tag::Stone) {
             return Color::srgb(0.5, 0.5, 0.5); // gray
+        }
+        if tags.0.contains(&Tag::Metal) {
+            return Color::srgb(0.7, 0.7, 0.8); // steel gray
         }
         if tags.0.contains(&Tag::Ice) {
             return Color::srgb(0.6, 0.8, 1.0); // light blue

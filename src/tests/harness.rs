@@ -357,6 +357,143 @@ impl GameHarness {
             .id()
     }
 
+    pub fn spawn_poison(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Poisoned])),
+                DerivedTags::default(),
+            ))
+            .id()
+    }
+
+    pub fn spawn_spark(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Metal, Tag::Electrified])),
+                DerivedTags::default(),
+            ))
+            .id()
+    }
+
+    pub fn spawn_explosive_barrel(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Wood, Tag::Explosive])),
+                DerivedTags::default(),
+                Pushable,
+                Blocking,
+            ))
+            .id()
+    }
+
+    pub fn spawn_metal_crate(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Metal])),
+                DerivedTags::default(),
+                Pushable,
+                Blocking,
+            ))
+            .id()
+    }
+
+    pub fn spawn_poison_mushroom(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Wood, Tag::Poisoned])),
+                DerivedTags::default(),
+            ))
+            .id()
+    }
+
+    pub fn spawn_lightning_rod(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Metal, Tag::Electrified])),
+                DerivedTags::default(),
+                Blocking,
+            ))
+            .id()
+    }
+
+    pub fn spawn_water_puddle(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Wet])),
+                DerivedTags::default(),
+            ))
+            .id()
+    }
+
+    pub fn spawn_fire_imp(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Flesh, Tag::OnFire])),
+                DerivedTags::default(),
+                Enemy,
+                Health(2),
+                Blocking,
+            ))
+            .id()
+    }
+
+    pub fn spawn_ice_golem(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Ice, Tag::Flesh])),
+                DerivedTags::default(),
+                Enemy,
+                Health(4),
+                Blocking,
+            ))
+            .id()
+    }
+
+    pub fn spawn_poison_spider(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Flesh, Tag::Poisoned])),
+                DerivedTags::default(),
+                Enemy,
+                Health(1),
+                Blocking,
+            ))
+            .id()
+    }
+
+    pub fn spawn_shock_eel(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Flesh, Tag::Wet, Tag::Electrified])),
+                DerivedTags::default(),
+                Enemy,
+                Health(2),
+            ))
+            .id()
+    }
+
     /// Expose app for param-validation tests that need direct access.
     pub fn app_mut(&mut self) -> &mut App {
         &mut self.app
