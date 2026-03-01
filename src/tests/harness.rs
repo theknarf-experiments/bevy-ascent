@@ -97,10 +97,7 @@ impl GameHarness {
                 .after(player_input)
                 .run_if(in_state(GameState::Playing)),
         );
-        app.add_systems(
-            Update,
-            enemy_turn.run_if(in_state(TurnPhase::EnemyTurn)),
-        );
+        app.add_systems(Update, enemy_turn.run_if(in_state(TurnPhase::EnemyTurn)));
         app.add_systems(
             Update,
             update_fog_of_war
@@ -145,32 +142,19 @@ impl GameHarness {
                 return;
             }
         }
-        panic!(
-            "wait_until: condition not met after {} frames",
-            max_frames
-        );
+        panic!("wait_until: condition not met after {} frames", max_frames);
     }
 
     pub fn wait_until_phase(&mut self, phase: TurnPhase) {
         self.wait_until(
-            move |app| {
-                *app.world_mut()
-                    .resource::<State<TurnPhase>>()
-                    .get()
-                    == phase
-            },
+            move |app| *app.world_mut().resource::<State<TurnPhase>>().get() == phase,
             MAX_FRAMES,
         );
     }
 
     pub fn wait_until_state(&mut self, state: GameState) {
         self.wait_until(
-            move |app| {
-                *app.world_mut()
-                    .resource::<State<GameState>>()
-                    .get()
-                    == state
-            },
+            move |app| *app.world_mut().resource::<State<GameState>>().get() == state,
             MAX_FRAMES,
         );
     }
@@ -204,10 +188,7 @@ impl GameHarness {
     }
 
     pub fn entity_pos(&mut self, entity: Entity) -> Option<IVec2> {
-        self.app
-            .world_mut()
-            .get::<GridPos>(entity)
-            .map(|gp| gp.0)
+        self.app.world_mut().get::<GridPos>(entity).map(|gp| gp.0)
     }
 
     pub fn player_health(&mut self) -> Option<i32> {
@@ -217,10 +198,7 @@ impl GameHarness {
     }
 
     pub fn entity_health(&mut self, entity: Entity) -> Option<i32> {
-        self.app
-            .world_mut()
-            .get::<Health>(entity)
-            .map(|h| h.0)
+        self.app.world_mut().get::<Health>(entity).map(|h| h.0)
     }
 
     pub fn enemy_count(&mut self) -> usize {
@@ -229,11 +207,7 @@ impl GameHarness {
     }
 
     pub fn turn_phase(&mut self) -> TurnPhase {
-        *self
-            .app
-            .world_mut()
-            .resource::<State<TurnPhase>>()
-            .get()
+        *self.app.world_mut().resource::<State<TurnPhase>>().get()
     }
 
     pub fn current_floor(&mut self) -> u32 {
@@ -255,7 +229,9 @@ impl GameHarness {
     pub fn player_inventory(&mut self) -> Option<(Option<Entity>, Option<Entity>, Vec<Entity>)> {
         let w = self.app.world_mut();
         let mut q = w.query_filtered::<&Inventory, With<Player>>();
-        q.iter(w).next().map(|inv| (inv.weapon, inv.armor, inv.consumables.clone()))
+        q.iter(w)
+            .next()
+            .map(|inv| (inv.weapon, inv.armor, inv.consumables.clone()))
     }
 
     pub fn tags_at(&mut self, pos: IVec2) -> Vec<BTreeSet<Tag>> {
@@ -330,11 +306,7 @@ impl GameHarness {
     pub fn spawn_wall(&mut self, pos: IVec2) -> Entity {
         self.app
             .world_mut()
-            .spawn((
-                GridPos(pos),
-                Tags(BTreeSet::from([Tag::Stone])),
-                Blocking,
-            ))
+            .spawn((GridPos(pos), Tags(BTreeSet::from([Tag::Stone])), Blocking))
             .id()
     }
 
@@ -388,10 +360,7 @@ impl GameHarness {
     }
 
     pub fn spawn_exit(&mut self, pos: IVec2) -> Entity {
-        self.app
-            .world_mut()
-            .spawn((GridPos(pos), Exit))
-            .id()
+        self.app.world_mut().spawn((GridPos(pos), Exit)).id()
     }
 
     pub fn spawn_stairs_down(&mut self, pos: IVec2) -> Entity {

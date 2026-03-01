@@ -1,8 +1,8 @@
-use bevy::prelude::*;
 use bevy::picking::Pickable;
+use bevy::prelude::*;
 
 use crate::components::*;
-use crate::items::{item_glyph, item_name, item_color};
+use crate::items::{item_color, item_glyph, item_name};
 
 pub const CELL_SIZE: f32 = 40.0;
 const GRID_W: f32 = 12.0;
@@ -11,10 +11,7 @@ const GRID_H: f32 = 12.0;
 pub fn setup_camera(mut commands: Commands) {
     let center_x = (GRID_W - 1.0) * CELL_SIZE / 2.0;
     let center_y = -(GRID_H - 1.0) * CELL_SIZE / 2.0;
-    commands.spawn((
-        Camera2d,
-        Transform::from_xyz(center_x, center_y, 999.0),
-    ));
+    commands.spawn((Camera2d, Transform::from_xyz(center_x, center_y, 999.0)));
 }
 
 pub fn glyph_for(
@@ -76,7 +73,8 @@ pub fn glyph_for(
         if tags.0.contains(&Tag::Explosive) {
             return "X"; // Explosive Barrel
         }
-        if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) && blocking.is_some() {
+        if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) && blocking.is_some()
+        {
             return "!"; // Lightning Rod
         }
         if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) {
@@ -106,7 +104,10 @@ pub fn glyph_for(
         if tags.0.contains(&Tag::Poisoned) && !tags.0.contains(&Tag::Flesh) {
             return "p"; // Poison Gas
         }
-        if tags.0.contains(&Tag::Wet) && !tags.0.contains(&Tag::Flesh) && !tags.0.contains(&Tag::Ice) {
+        if tags.0.contains(&Tag::Wet)
+            && !tags.0.contains(&Tag::Flesh)
+            && !tags.0.contains(&Tag::Ice)
+        {
             return "~";
         }
     }
@@ -171,7 +172,8 @@ pub fn name_for(
         if tags.0.contains(&Tag::Explosive) {
             return "Explosive Barrel";
         }
-        if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) && blocking.is_some() {
+        if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) && blocking.is_some()
+        {
             return "Lightning Rod";
         }
         if tags.0.contains(&Tag::Metal) && tags.0.contains(&Tag::Electrified) {
@@ -201,7 +203,10 @@ pub fn name_for(
         if tags.0.contains(&Tag::Poisoned) && !tags.0.contains(&Tag::Flesh) {
             return "Poison Gas";
         }
-        if tags.0.contains(&Tag::Wet) && !tags.0.contains(&Tag::Flesh) && !tags.0.contains(&Tag::Ice) {
+        if tags.0.contains(&Tag::Wet)
+            && !tags.0.contains(&Tag::Flesh)
+            && !tags.0.contains(&Tag::Ice)
+        {
             return "Water";
         }
     }
@@ -222,7 +227,10 @@ fn color_for(
 ) -> Color {
     // Check derived tags first for dynamic state
     if let Some(dt) = derived {
-        if dt.0.contains(&Tag::FireDamage) || dt.0.contains(&Tag::PoisonDamage) || dt.0.contains(&Tag::ElectricDamage) {
+        if dt.0.contains(&Tag::FireDamage)
+            || dt.0.contains(&Tag::PoisonDamage)
+            || dt.0.contains(&Tag::ElectricDamage)
+        {
             return Color::srgb(1.0, 0.2, 0.2); // bright red (any damage)
         }
         if dt.0.contains(&Tag::Exploding) {
@@ -325,7 +333,12 @@ fn apply_fog(color: Color, visibility: TileVisibility, is_enemy: bool) -> Color 
             if is_enemy {
                 Color::srgba(0.0, 0.0, 0.0, 0.0)
             } else {
-                let Srgba { red, green, blue, alpha } = color.to_srgba();
+                let Srgba {
+                    red,
+                    green,
+                    blue,
+                    alpha,
+                } = color.to_srgba();
                 Color::srgba(red * 0.5, green * 0.5, blue * 0.5, alpha * 0.3)
             }
         }
@@ -356,11 +369,48 @@ pub fn spawn_sprites(
     >,
     fog_map: Res<FogMap>,
 ) {
-    for (entity, grid_pos, player, enemy, exit, pushable, blocking, tags, derived, stairs_down, stairs_up, item_kind, chest, boss) in
-        query.iter()
+    for (
+        entity,
+        grid_pos,
+        player,
+        enemy,
+        exit,
+        pushable,
+        blocking,
+        tags,
+        derived,
+        stairs_down,
+        stairs_up,
+        item_kind,
+        chest,
+        boss,
+    ) in query.iter()
     {
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest, boss);
-        let mut color = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up, item_kind, chest, boss);
+        let glyph = glyph_for(
+            player,
+            enemy,
+            exit,
+            pushable,
+            blocking,
+            tags,
+            stairs_down,
+            stairs_up,
+            item_kind,
+            chest,
+            boss,
+        );
+        let mut color = color_for(
+            tags,
+            derived,
+            player,
+            enemy,
+            exit,
+            stairs_down,
+            stairs_up,
+            item_kind,
+            chest,
+            boss,
+        );
 
         // Apply fog (player is always visible)
         if player.is_none() {
@@ -421,13 +471,35 @@ pub fn sync_colors(
     )>,
     fog_map: Res<FogMap>,
 ) {
-    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking, flash, (stairs_down, stairs_up, item_kind, chest, boss, grid_pos)) in
-        query.iter_mut()
+    for (
+        mut text_color,
+        mut text,
+        tags,
+        derived,
+        player,
+        enemy,
+        exit,
+        pushable,
+        blocking,
+        flash,
+        (stairs_down, stairs_up, item_kind, chest, boss, grid_pos),
+    ) in query.iter_mut()
     {
         if flash.is_some() {
             text_color.0 = Color::WHITE;
         } else {
-            let mut color = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up, item_kind, chest, boss);
+            let mut color = color_for(
+                tags,
+                derived,
+                player,
+                enemy,
+                exit,
+                stairs_down,
+                stairs_up,
+                item_kind,
+                chest,
+                boss,
+            );
 
             // Apply fog (player is always visible)
             if player.is_none() {
@@ -439,7 +511,19 @@ pub fn sync_colors(
 
             text_color.0 = color;
         }
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest, boss);
+        let glyph = glyph_for(
+            player,
+            enemy,
+            exit,
+            pushable,
+            blocking,
+            tags,
+            stairs_down,
+            stairs_up,
+            item_kind,
+            chest,
+            boss,
+        );
         **text = glyph.to_string();
     }
 }

@@ -6,12 +6,12 @@ mod level;
 mod level_gen;
 mod render;
 mod systems;
-mod ui;
 #[cfg(test)]
 mod tests;
+mod ui;
 
-use bevy::prelude::*;
 use bevy::feathers::FeathersPlugins;
+use bevy::prelude::*;
 
 use components::*;
 use datalog::resolve_environment;
@@ -59,7 +59,13 @@ fn main() {
             OnEnter(GameState::Playing),
             (
                 generate_levels,
-                (spawn_initial_floor, spawn_tooltip, spawn_floor_indicator, spawn_stats_panel, reset_game_resources)
+                (
+                    spawn_initial_floor,
+                    spawn_tooltip,
+                    spawn_floor_indicator,
+                    spawn_stats_panel,
+                    reset_game_resources,
+                )
                     .after(generate_levels),
             ),
         )
@@ -83,7 +89,12 @@ fn main() {
         )
         .add_systems(
             Update,
-            (update_tooltip, show_victory_banner, update_floor_indicator, update_stats_panel)
+            (
+                update_tooltip,
+                show_victory_banner,
+                update_floor_indicator,
+                update_stats_panel,
+            )
                 .run_if(in_state(GameState::Playing)),
         )
         // Turn phases (frozen while menu overlay is active)

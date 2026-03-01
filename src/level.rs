@@ -44,10 +44,7 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Blocking,
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
-                        DropTable(vec![
-                            (ItemKind::Gold, 50),
-                            (ItemKind::HealthPotion, 25),
-                        ]),
+                        DropTable(vec![(ItemKind::Gold, 50), (ItemKind::HealthPotion, 25)]),
                     ));
                 }
                 'T' => {
@@ -128,10 +125,7 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Blocking,
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
-                        DropTable(vec![
-                            (ItemKind::Gold, 50),
-                            (ItemKind::FireBlade, 25),
-                        ]),
+                        DropTable(vec![(ItemKind::Gold, 50), (ItemKind::FireBlade, 25)]),
                     ));
                 }
                 'i' => {
@@ -145,10 +139,7 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Blocking,
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
-                        DropTable(vec![
-                            (ItemKind::Gold, 100),
-                            (ItemKind::IronArmor, 50),
-                        ]),
+                        DropTable(vec![(ItemKind::Gold, 100), (ItemKind::IronArmor, 50)]),
                     ));
                 }
                 's' => {
@@ -179,10 +170,7 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Health(2),
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
-                        DropTable(vec![
-                            (ItemKind::Gold, 50),
-                            (ItemKind::IronSword, 25),
-                        ]),
+                        DropTable(vec![(ItemKind::Gold, 50), (ItemKind::IronSword, 25)]),
                     ));
                 }
                 'p' => {
@@ -315,7 +303,9 @@ pub fn spawn_initial_floor(
 ) {
     floor.0 = 1;
     let result = spawn_floor(&mut commands, &generated.floors[0]);
-    let player_pos = result.player_spawn.expect("Floor 1 must have a player spawn (@)");
+    let player_pos = result
+        .player_spawn
+        .expect("Floor 1 must have a player spawn (@)");
     commands.spawn((
         GridPos(player_pos),
         Tags(BTreeSet::from([Tag::Flesh])),

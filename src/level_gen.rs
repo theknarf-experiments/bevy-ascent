@@ -189,13 +189,10 @@ impl std::fmt::Display for LevelGenError {
 }
 
 fn generate_floor(floor_num: u32, seed: u32) -> Result<String, LevelGenError> {
-    let args = vec![
-        format!("--rand-freq=0.5"),
-        format!("--seed={}", seed),
-    ];
+    let args = vec![format!("--rand-freq=0.5"), format!("--seed={}", seed)];
 
-    let mut ctl = clingo::control(args)
-        .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?;
+    let mut ctl =
+        clingo::control(args).map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?;
 
     let floor_fact = format!("floor_num({}).", floor_num);
     let full_program = format!("{}\n{}", ASP_PROGRAM, floor_fact);
@@ -203,8 +200,10 @@ fn generate_floor(floor_num: u32, seed: u32) -> Result<String, LevelGenError> {
     ctl.add("base", &[], &full_program)
         .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?;
 
-    let parts = vec![clingo::Part::new("base", vec![])
-        .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?];
+    let parts = vec![
+        clingo::Part::new("base", vec![])
+            .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?,
+    ];
 
     ctl.ground(&parts)
         .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?;
@@ -214,26 +213,26 @@ fn generate_floor(floor_num: u32, seed: u32) -> Result<String, LevelGenError> {
         .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?;
 
     let model_atoms = loop {
-        handle.resume()
+        handle
+            .resume()
             .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?;
-        if let Some(model) = handle.model()
+        if let Some(model) = handle
+            .model()
             .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?
         {
             let atoms = model
                 .symbols(clingo::ShowType::SHOWN)
                 .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?;
             // Collect atom strings before dropping the model
-            let atom_strings: Vec<String> = atoms
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
+            let atom_strings: Vec<String> = atoms.iter().map(|s| s.to_string()).collect();
             break atom_strings;
         } else {
             return Err(LevelGenError::NoModel);
         }
     };
 
-    handle.close()
+    handle
+        .close()
         .map_err(|e| LevelGenError::ClingoError(format!("{:?}", e)))?;
 
     Ok(build_grid_from_atoms(&model_atoms))
@@ -316,7 +315,10 @@ pub fn generate_levels(world: &mut World) {
                 floors.push(layout);
             }
             Err(e) => {
-                warn!("Level generation failed for floor {}: {}. Using fallback.", floor_num, e);
+                warn!(
+                    "Level generation failed for floor {}: {}. Using fallback.",
+                    floor_num, e
+                );
                 let fb = fallback_floors();
                 world.insert_resource(fb);
                 return;
@@ -325,11 +327,7 @@ pub fn generate_levels(world: &mut World) {
     }
 
     world.insert_resource(GeneratedFloors {
-        floors: [
-            floors.remove(0),
-            floors.remove(0),
-            floors.remove(0),
-        ],
+        floors: [floors.remove(0), floors.remove(0), floors.remove(0)],
     });
 }
 
@@ -450,9 +448,21 @@ mod tests {
             }
         }
 
-        assert!(torch_count >= 1, "should have at least 1 torch, got {}", torch_count);
-        assert!(barrel_count >= 1, "should have at least 1 barrel, got {}", barrel_count);
-        assert!(oil_count >= 1, "should have at least 1 oil, got {}", oil_count);
+        assert!(
+            torch_count >= 1,
+            "should have at least 1 torch, got {}",
+            torch_count
+        );
+        assert!(
+            barrel_count >= 1,
+            "should have at least 1 barrel, got {}",
+            barrel_count
+        );
+        assert!(
+            oil_count >= 1,
+            "should have at least 1 oil, got {}",
+            oil_count
+        );
 
         match floor_num {
             1 => {
@@ -467,7 +477,11 @@ mod tests {
             3 => {
                 assert_eq!(stairs_up_count, 1, "floor 3 should have 1 stairs up");
                 assert_eq!(exit_count, 1, "floor 3 should have 1 exit");
-                let dragon_count = lines.iter().flat_map(|l| l.chars()).filter(|&c| c == 'D').count();
+                let dragon_count = lines
+                    .iter()
+                    .flat_map(|l| l.chars())
+                    .filter(|&c| c == 'D')
+                    .count();
                 assert_eq!(dragon_count, 1, "floor 3 should have 1 dragon");
             }
             _ => panic!("unexpected floor_num"),
@@ -491,7 +505,8 @@ mod tests {
                         }
                         entity_positions.insert((x, y));
                     }
-                    'g' | 'T' | 'B' | 'o' | '>' | 'E' | '~' | 'p' | 'f' | 'i' | 's' | 'e' | 'X' | 'M' | 'm' | 'z' | '!' | 'C' | '$' | 'H' | 'D' => {
+                    'g' | 'T' | 'B' | 'o' | '>' | 'E' | '~' | 'p' | 'f' | 'i' | 's' | 'e' | 'X'
+                    | 'M' | 'm' | 'z' | '!' | 'C' | '$' | 'H' | 'D' => {
                         entity_positions.insert((x, y));
                     }
                     _ => {}
@@ -557,8 +572,8 @@ mod tests {
     #[test]
     fn generated_floors_are_reachable() {
         for floor_num in 1..=3 {
-            let layout =
-                generate_floor(floor_num, 123).expect(&format!("floor {} should generate", floor_num));
+            let layout = generate_floor(floor_num, 123)
+                .expect(&format!("floor {} should generate", floor_num));
             check_reachability(&layout);
         }
     }
@@ -567,7 +582,10 @@ mod tests {
     fn different_seeds_produce_different_layouts() {
         let layout_a = generate_floor(1, 1).expect("should generate");
         let layout_b = generate_floor(1, 9999).expect("should generate");
-        assert_ne!(layout_a, layout_b, "different seeds should produce different layouts");
+        assert_ne!(
+            layout_a, layout_b,
+            "different seeds should produce different layouts"
+        );
     }
 
     #[test]

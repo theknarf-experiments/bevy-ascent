@@ -199,7 +199,10 @@ fn ice_melts_adjacent_to_fire() {
     // apply_consequences despawns the ice entity.
     game.resolve_only();
     let derived = &game.derived_at(IVec2::new(1, 0))[0];
-    assert!(derived.contains(&Tag::Melted), "ice adjacent to fire should melt");
+    assert!(
+        derived.contains(&Tag::Melted),
+        "ice adjacent to fire should melt"
+    );
     assert!(derived.contains(&Tag::Wet), "melted ice should be wet");
 }
 
@@ -248,14 +251,18 @@ fn flesh_on_same_tile_as_fire_takes_damage() {
 #[test]
 fn taking_damage_decrements_health() {
     let mut game = GameHarness::custom();
-    let enemy = game.app_mut().world_mut().spawn((
-        GridPos(IVec2::new(0, 0)),
-        Tags(BTreeSet::from([Tag::Flesh])),
-        DerivedTags(BTreeSet::from([Tag::FireDamage])),
-        Health(3),
-        Enemy,
-        Blocking,
-    )).id();
+    let enemy = game
+        .app_mut()
+        .world_mut()
+        .spawn((
+            GridPos(IVec2::new(0, 0)),
+            Tags(BTreeSet::from([Tag::Flesh])),
+            DerivedTags(BTreeSet::from([Tag::FireDamage])),
+            Health(3),
+            Enemy,
+            Blocking,
+        ))
+        .id();
 
     // Set phase to ApplyConsequences and wait for it to complete
     game.app_mut()
@@ -289,7 +296,11 @@ fn zero_health_despawns() {
         .set(TurnPhase::ApplyConsequences);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
-    assert_eq!(game.enemy_count(), 0, "entity with 0 health should be despawned");
+    assert_eq!(
+        game.enemy_count(),
+        0,
+        "entity with 0 health should be despawned"
+    );
 }
 
 #[test]
@@ -335,7 +346,10 @@ fn melted_ice_despawns_and_spawns_water() {
     assert_eq!(ice_count, 0, "melted ice should be despawned");
 
     let water_count = tags_list.iter().filter(|t| t.contains(&Tag::Wet)).count();
-    assert_eq!(water_count, 1, "water should be spawned at ice's old position");
+    assert_eq!(
+        water_count, 1,
+        "water should be spawned at ice's old position"
+    );
 }
 
 // =========================================================================
@@ -462,7 +476,11 @@ fn player_moves_into_empty_tile() {
     game.press_key(KeyCode::ArrowUp);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
-    assert_eq!(game.player_pos(), Some(IVec2::new(5, 4)), "player should move up");
+    assert_eq!(
+        game.player_pos(),
+        Some(IVec2::new(5, 4)),
+        "player should move up"
+    );
 }
 
 #[test]
@@ -549,7 +567,11 @@ fn player_can_move_twice() {
 
     game.press_key(KeyCode::ArrowDown);
     game.wait_until_phase(TurnPhase::WaitingForInput);
-    assert_eq!(game.player_pos(), Some(IVec2::new(5, 6)), "player should have moved down");
+    assert_eq!(
+        game.player_pos(),
+        Some(IVec2::new(5, 6)),
+        "player should have moved down"
+    );
 
     game.press_key(KeyCode::ArrowDown);
     game.wait_until_phase(TurnPhase::WaitingForInput);
@@ -732,14 +754,18 @@ fn poison_and_fire_stack_damage() {
     // Poison source and fire source near a flesh entity
     game.spawn_poison(IVec2::new(0, 0));
     game.spawn_torch(IVec2::new(2, 0));
-    let enemy = game.app_mut().world_mut().spawn((
-        GridPos(IVec2::new(1, 0)),
-        Tags(BTreeSet::from([Tag::Flesh])),
-        DerivedTags::default(),
-        Enemy,
-        Health(5),
-        Blocking,
-    )).id();
+    let enemy = game
+        .app_mut()
+        .world_mut()
+        .spawn((
+            GridPos(IVec2::new(1, 0)),
+            Tags(BTreeSet::from([Tag::Flesh])),
+            DerivedTags::default(),
+            Enemy,
+            Health(5),
+            Blocking,
+        ))
+        .id();
     game.resolve();
     // Both FireDamage and PoisonDamage should apply: -2 HP total
     assert_eq!(
@@ -834,14 +860,18 @@ fn all_three_elements_triple_damage() {
     game.spawn_torch(IVec2::new(1, 0)); // fire source
     game.spawn_poison(IVec2::new(0, 1)); // poison source
     game.spawn_spark(IVec2::new(1, 2)); // electricity source
-    let enemy = game.app_mut().world_mut().spawn((
-        GridPos(IVec2::new(1, 1)),
-        Tags(BTreeSet::from([Tag::Flesh])),
-        DerivedTags::default(),
-        Enemy,
-        Health(5),
-        Blocking,
-    )).id();
+    let enemy = game
+        .app_mut()
+        .world_mut()
+        .spawn((
+            GridPos(IVec2::new(1, 1)),
+            Tags(BTreeSet::from([Tag::Flesh])),
+            DerivedTags::default(),
+            Enemy,
+            Health(5),
+            Blocking,
+        ))
+        .id();
     game.resolve();
     assert_eq!(
         game.entity_health(enemy),
@@ -886,10 +916,19 @@ fn ice_golem_melts_near_fire() {
     game.spawn_torch(IVec2::new(0, 0));
     game.resolve_only();
     let derived = &game.derived_at(IVec2::new(1, 0))[0];
-    assert!(derived.contains(&Tag::Melted), "ice golem should melt near fire");
-    assert!(derived.contains(&Tag::FireDamage), "ice golem should take fire damage from melting");
+    assert!(
+        derived.contains(&Tag::Melted),
+        "ice golem should melt near fire"
+    );
+    assert!(
+        derived.contains(&Tag::FireDamage),
+        "ice golem should take fire damage from melting"
+    );
     // Verify it also has Wet derived
-    assert!(derived.contains(&Tag::Wet), "melted ice golem should be wet");
+    assert!(
+        derived.contains(&Tag::Wet),
+        "melted ice golem should be wet"
+    );
 }
 
 #[test]
@@ -936,7 +975,10 @@ fn explosive_barrel_area_fire_on_ignite() {
     // After explosion, the barrel should be despawned
     let tags_at_barrel = game.tags_at(IVec2::new(1, 0));
     let barrel_exists = tags_at_barrel.iter().any(|t| t.contains(&Tag::Explosive));
-    assert!(!barrel_exists, "explosive barrel should be despawned after exploding");
+    assert!(
+        !barrel_exists,
+        "explosive barrel should be despawned after exploding"
+    );
     // Entity at (3,0) should have gained OnFire from explosion radius
     let tags_at_3 = game.tags_at(IVec2::new(3, 0));
     assert!(
@@ -957,7 +999,10 @@ fn explosive_barrel_chain_reaction() {
     game.resolve();
     let tags_at_3 = game.tags_at(IVec2::new(3, 0));
     let second_barrel_exists = tags_at_3.iter().any(|t| t.contains(&Tag::Explosive));
-    assert!(!second_barrel_exists, "chain reaction should despawn second barrel too");
+    assert!(
+        !second_barrel_exists,
+        "chain reaction should despawn second barrel too"
+    );
 }
 
 #[test]
@@ -1027,7 +1072,11 @@ fn gold_pickup() {
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     assert_eq!(game.gold_count(), 1, "gold should be picked up");
-    assert_eq!(game.item_count_at(IVec2::new(5, 4)), 0, "gold should be despawned");
+    assert_eq!(
+        game.item_count_at(IVec2::new(5, 4)),
+        0,
+        "gold should be despawned"
+    );
 }
 
 #[test]
@@ -1064,7 +1113,10 @@ fn weapon_swap_drops_old() {
     let (weapon, _, _) = game.player_inventory().unwrap();
     assert_eq!(weapon, Some(sword2), "second sword should be equipped");
     // Old sword should be dropped at player's position
-    assert!(game.entity_pos(sword1).is_some(), "old sword should be back on ground");
+    assert!(
+        game.entity_pos(sword1).is_some(),
+        "old sword should be back on ground"
+    );
 }
 
 #[test]
@@ -1091,7 +1143,10 @@ fn consumable_pickup() {
 
     let (_, _, consumables) = game.player_inventory().unwrap();
     assert_eq!(consumables.len(), 1, "consumable should be in inventory");
-    assert_eq!(consumables[0], potion, "health potion should be the consumable");
+    assert_eq!(
+        consumables[0], potion,
+        "health potion should be the consumable"
+    );
 }
 
 #[test]
@@ -1122,7 +1177,11 @@ fn consumable_full_stays_on_ground() {
 
     let (_, _, consumables) = game.player_inventory().unwrap();
     assert_eq!(consumables.len(), 4, "should still have 4 consumables");
-    assert_eq!(game.item_count_at(IVec2::new(5, 4)), 1, "5th consumable should stay on ground");
+    assert_eq!(
+        game.item_count_at(IVec2::new(5, 4)),
+        1,
+        "5th consumable should stay on ground"
+    );
 }
 
 // =========================================================================
@@ -1151,7 +1210,11 @@ fn health_potion_restores_hp() {
     // Use consumable
     game.press_key(KeyCode::Digit1);
 
-    assert_eq!(game.player_health(), Some(5), "health potion should restore 3 HP");
+    assert_eq!(
+        game.player_health(),
+        Some(5),
+        "health potion should restore 3 HP"
+    );
     let (_, _, consumables) = game.player_inventory().unwrap();
     assert_eq!(consumables.len(), 0, "consumable should be removed");
 }
@@ -1219,7 +1282,11 @@ fn iron_sword_adds_damage() {
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     // With IronSword (+1), total damage = 2, so 2HP enemy should die
-    assert_eq!(game.enemy_count(), 0, "iron sword should deal 2 damage (1 base + 1 weapon), killing 2HP enemy");
+    assert_eq!(
+        game.enemy_count(),
+        0,
+        "iron sword should deal 2 damage (1 base + 1 weapon), killing 2HP enemy"
+    );
 }
 
 #[test]
@@ -1249,14 +1316,18 @@ fn poison_dagger_poisons_enemy() {
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     // Spawn a high-HP enemy adjacent above player (5,4) so it survives the hit
-    let enemy = game.app_mut().world_mut().spawn((
-        GridPos(IVec2::new(5, 3)),
-        Tags(BTreeSet::from([Tag::Flesh])),
-        DerivedTags::default(),
-        Enemy,
-        Health(5),
-        Blocking,
-    )).id();
+    let enemy = game
+        .app_mut()
+        .world_mut()
+        .spawn((
+            GridPos(IVec2::new(5, 3)),
+            Tags(BTreeSet::from([Tag::Flesh])),
+            DerivedTags::default(),
+            Enemy,
+            Health(5),
+            Blocking,
+        ))
+        .id();
 
     game.press_key(KeyCode::ArrowUp);
     game.wait_until_phase(TurnPhase::WaitingForInput);
@@ -1404,7 +1475,10 @@ fn enemy_drops_loot_on_death() {
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     assert_eq!(game.enemy_count(), 0, "enemy should be dead");
-    assert!(game.item_count_at(IVec2::new(5, 4)) >= 1, "enemy should drop gold");
+    assert!(
+        game.item_count_at(IVec2::new(5, 4)) >= 1,
+        "enemy should drop gold"
+    );
 }
 
 #[test]
@@ -1412,20 +1486,28 @@ fn enemy_without_drop_table_no_items() {
     let mut game = GameHarness::custom();
     game.spawn_player(IVec2::new(5, 5));
     // Regular enemy without DropTable, 1HP for quick kill
-    let enemy = game.app_mut().world_mut().spawn((
-        GridPos(IVec2::new(5, 4)),
-        Tags(BTreeSet::from([Tag::Flesh])),
-        DerivedTags::default(),
-        Enemy,
-        Health(1),
-        Blocking,
-    )).id();
+    let enemy = game
+        .app_mut()
+        .world_mut()
+        .spawn((
+            GridPos(IVec2::new(5, 4)),
+            Tags(BTreeSet::from([Tag::Flesh])),
+            DerivedTags::default(),
+            Enemy,
+            Health(1),
+            Blocking,
+        ))
+        .id();
 
     game.press_key(KeyCode::ArrowUp);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
     assert!(game.entity_pos(enemy).is_none(), "enemy should be dead");
-    assert_eq!(game.item_count_at(IVec2::new(5, 4)), 0, "no items should drop without DropTable");
+    assert_eq!(
+        game.item_count_at(IVec2::new(5, 4)),
+        0,
+        "no items should drop without DropTable"
+    );
 }
 
 // =========================================================================
@@ -1438,7 +1520,10 @@ fn player_starts_with_empty_inventory() {
     let (weapon, armor, consumables) = game.player_inventory().unwrap();
     assert!(weapon.is_none(), "player should start with no weapon");
     assert!(armor.is_none(), "player should start with no armor");
-    assert!(consumables.is_empty(), "player should start with no consumables");
+    assert!(
+        consumables.is_empty(),
+        "player should start with no consumables"
+    );
 }
 
 // =========================================================================
@@ -1453,7 +1538,9 @@ fn fog_initial_state_is_all_unexplored() {
             assert_eq!(
                 game.fog_at(IVec2::new(x, y)),
                 TileVisibility::Unexplored,
-                "tile ({},{}) should start Unexplored", x, y
+                "tile ({},{}) should start Unexplored",
+                x,
+                y
             );
         }
     }

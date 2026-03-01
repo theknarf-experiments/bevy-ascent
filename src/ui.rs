@@ -1,7 +1,7 @@
-use bevy::prelude::*;
 use bevy::ecs::spawn::Spawn;
-use bevy::feathers::controls::{button, ButtonProps};
+use bevy::feathers::controls::{ButtonProps, button};
 use bevy::picking::Pickable;
+use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 
 use crate::components::*;
@@ -52,13 +52,15 @@ pub fn spawn_main_menu(mut commands: Commands) {
             ));
 
             // Button container (fixed width so all buttons match)
-            parent.spawn(Node {
-                width: Val::Px(200.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(10.0),
-                ..default()
-            }).with_children(|buttons| {
-                buttons
+            parent
+                .spawn(Node {
+                    width: Val::Px(200.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(10.0),
+                    ..default()
+                })
+                .with_children(|buttons| {
+                    buttons
                     .spawn(button(
                         ButtonProps::default(),
                         (),
@@ -77,46 +79,43 @@ pub fn spawn_main_menu(mut commands: Commands) {
                         },
                     );
 
-                buttons
-                    .spawn(button(
-                        ButtonProps::default(),
-                        (),
-                        (Spawn((
-                            Text::new("Settings"),
-                            TextFont {
-                                font_size: 24.0,
-                                ..default()
+                    buttons
+                        .spawn(button(
+                            ButtonProps::default(),
+                            (),
+                            (Spawn((
+                                Text::new("Settings"),
+                                TextFont {
+                                    font_size: 24.0,
+                                    ..default()
+                                },
+                            )),),
+                        ))
+                        .observe(
+                            |_trigger: On<Activate>,
+                             mut next_overlay: ResMut<NextState<MenuOverlay>>,
+                             mut origin: ResMut<SettingsOrigin>| {
+                                origin.0 = SettingsFrom::MainMenu;
+                                next_overlay.set(MenuOverlay::Settings);
                             },
-                        )),),
-                    ))
-                    .observe(
-                        |_trigger: On<Activate>,
-                         mut next_overlay: ResMut<NextState<MenuOverlay>>,
-                         mut origin: ResMut<SettingsOrigin>| {
-                            origin.0 = SettingsFrom::MainMenu;
-                            next_overlay.set(MenuOverlay::Settings);
-                        },
-                    );
+                        );
 
-                buttons
-                    .spawn(button(
-                        ButtonProps::default(),
-                        (),
-                        (Spawn((
-                            Text::new("Quit"),
-                            TextFont {
-                                font_size: 24.0,
-                                ..default()
-                            },
-                        )),),
-                    ))
-                    .observe(
-                        |_trigger: On<Activate>,
-                         mut exit: MessageWriter<AppExit>| {
+                    buttons
+                        .spawn(button(
+                            ButtonProps::default(),
+                            (),
+                            (Spawn((
+                                Text::new("Quit"),
+                                TextFont {
+                                    font_size: 24.0,
+                                    ..default()
+                                },
+                            )),),
+                        ))
+                        .observe(|_trigger: On<Activate>, mut exit: MessageWriter<AppExit>| {
                             exit.write(AppExit::Success);
-                        },
-                    );
-            });
+                        });
+                });
         });
 }
 
@@ -172,8 +171,7 @@ pub fn show_victory_banner(
                     )),),
                 ))
                 .observe(
-                    |_trigger: On<Activate>,
-                     mut next_state: ResMut<NextState<GameState>>| {
+                    |_trigger: On<Activate>, mut next_state: ResMut<NextState<GameState>>| {
                         next_state.set(GameState::MainMenu);
                     },
                 );
@@ -233,8 +231,7 @@ pub fn spawn_game_over_screen(mut commands: Commands, death_cause: Res<DeathCaus
                     )),),
                 ))
                 .observe(
-                    |_trigger: On<Activate>,
-                     mut next_state: ResMut<NextState<GameState>>| {
+                    |_trigger: On<Activate>, mut next_state: ResMut<NextState<GameState>>| {
                         next_state.set(GameState::Playing);
                     },
                 );
@@ -332,7 +329,22 @@ pub fn update_tooltip(
 
     // Collect entities at this cell
     let mut lines: Vec<String> = Vec::new();
-    for (grid_pos, player, enemy, exit, pushable, blocking, tags, health, stairs_down, stairs_up, item_kind, chest, boss) in entity_query.iter() {
+    for (
+        grid_pos,
+        player,
+        enemy,
+        exit,
+        pushable,
+        blocking,
+        tags,
+        health,
+        stairs_down,
+        stairs_up,
+        item_kind,
+        chest,
+        boss,
+    ) in entity_query.iter()
+    {
         if grid_pos.0 != cell {
             continue;
         }
@@ -342,8 +354,32 @@ pub fn update_tooltip(
             continue;
         }
 
-        let name = name_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest, boss);
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest, boss);
+        let name = name_for(
+            player,
+            enemy,
+            exit,
+            pushable,
+            blocking,
+            tags,
+            stairs_down,
+            stairs_up,
+            item_kind,
+            chest,
+            boss,
+        );
+        let glyph = glyph_for(
+            player,
+            enemy,
+            exit,
+            pushable,
+            blocking,
+            tags,
+            stairs_down,
+            stairs_up,
+            item_kind,
+            chest,
+            boss,
+        );
 
         let mut line = format!("{} ({})", name, glyph);
 
@@ -596,31 +632,87 @@ pub fn update_stats_panel(
     game_log: Res<GameLog>,
     mut hp_text: Query<
         &mut Text,
-        (With<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>, Without<StatsLogText>),
+        (
+            With<StatsHpText>,
+            Without<StatsFloorText>,
+            Without<StatsGoldText>,
+            Without<StatsWeaponText>,
+            Without<StatsArmorText>,
+            Without<StatsConsumablesText>,
+            Without<StatsLogText>,
+        ),
     >,
     mut floor_text: Query<
         &mut Text,
-        (With<StatsFloorText>, Without<StatsHpText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>, Without<StatsLogText>),
+        (
+            With<StatsFloorText>,
+            Without<StatsHpText>,
+            Without<StatsGoldText>,
+            Without<StatsWeaponText>,
+            Without<StatsArmorText>,
+            Without<StatsConsumablesText>,
+            Without<StatsLogText>,
+        ),
     >,
     mut gold_text: Query<
         &mut Text,
-        (With<StatsGoldText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>, Without<StatsLogText>),
+        (
+            With<StatsGoldText>,
+            Without<StatsHpText>,
+            Without<StatsFloorText>,
+            Without<StatsWeaponText>,
+            Without<StatsArmorText>,
+            Without<StatsConsumablesText>,
+            Without<StatsLogText>,
+        ),
     >,
     mut weapon_text: Query<
         &mut Text,
-        (With<StatsWeaponText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsArmorText>, Without<StatsConsumablesText>, Without<StatsLogText>),
+        (
+            With<StatsWeaponText>,
+            Without<StatsHpText>,
+            Without<StatsFloorText>,
+            Without<StatsGoldText>,
+            Without<StatsArmorText>,
+            Without<StatsConsumablesText>,
+            Without<StatsLogText>,
+        ),
     >,
     mut armor_text: Query<
         &mut Text,
-        (With<StatsArmorText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsConsumablesText>, Without<StatsLogText>),
+        (
+            With<StatsArmorText>,
+            Without<StatsHpText>,
+            Without<StatsFloorText>,
+            Without<StatsGoldText>,
+            Without<StatsWeaponText>,
+            Without<StatsConsumablesText>,
+            Without<StatsLogText>,
+        ),
     >,
     mut consumables_text: Query<
         &mut Text,
-        (With<StatsConsumablesText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsLogText>),
+        (
+            With<StatsConsumablesText>,
+            Without<StatsHpText>,
+            Without<StatsFloorText>,
+            Without<StatsGoldText>,
+            Without<StatsWeaponText>,
+            Without<StatsArmorText>,
+            Without<StatsLogText>,
+        ),
     >,
     mut log_text: Query<
         &mut Text,
-        (With<StatsLogText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+        (
+            With<StatsLogText>,
+            Without<StatsHpText>,
+            Without<StatsFloorText>,
+            Without<StatsGoldText>,
+            Without<StatsWeaponText>,
+            Without<StatsArmorText>,
+            Without<StatsConsumablesText>,
+        ),
     >,
     item_query: Query<(&ItemKind, Option<&WeaponDamage>, Option<&ArmorDefense>), With<Item>>,
 ) {
@@ -686,7 +778,12 @@ pub fn update_stats_panel(
 
     // Update log
     for mut text in log_text.iter_mut() {
-        let recent: Vec<&str> = game_log.recent(8).iter().rev().map(|s| s.as_str()).collect();
+        let recent: Vec<&str> = game_log
+            .recent(8)
+            .iter()
+            .rev()
+            .map(|s| s.as_str())
+            .collect();
         **text = recent.join("\n");
     }
 }
@@ -719,13 +816,15 @@ pub fn spawn_pause_menu(mut commands: Commands) {
             ));
 
             // Button container (fixed width so all buttons match)
-            parent.spawn(Node {
-                width: Val::Px(200.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(10.0),
-                ..default()
-            }).with_children(|buttons| {
-                buttons
+            parent
+                .spawn(Node {
+                    width: Val::Px(200.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(10.0),
+                    ..default()
+                })
+                .with_children(|buttons| {
+                    buttons
                     .spawn(button(
                         ButtonProps::default(),
                         (),
@@ -744,28 +843,28 @@ pub fn spawn_pause_menu(mut commands: Commands) {
                         },
                     );
 
-                buttons
-                    .spawn(button(
-                        ButtonProps::default(),
-                        (),
-                        (Spawn((
-                            Text::new("Settings"),
-                            TextFont {
-                                font_size: 24.0,
-                                ..default()
+                    buttons
+                        .spawn(button(
+                            ButtonProps::default(),
+                            (),
+                            (Spawn((
+                                Text::new("Settings"),
+                                TextFont {
+                                    font_size: 24.0,
+                                    ..default()
+                                },
+                            )),),
+                        ))
+                        .observe(
+                            |_trigger: On<Activate>,
+                             mut next_overlay: ResMut<NextState<MenuOverlay>>,
+                             mut origin: ResMut<SettingsOrigin>| {
+                                origin.0 = SettingsFrom::Paused;
+                                next_overlay.set(MenuOverlay::Settings);
                             },
-                        )),),
-                    ))
-                    .observe(
-                        |_trigger: On<Activate>,
-                         mut next_overlay: ResMut<NextState<MenuOverlay>>,
-                         mut origin: ResMut<SettingsOrigin>| {
-                            origin.0 = SettingsFrom::Paused;
-                            next_overlay.set(MenuOverlay::Settings);
-                        },
-                    );
+                        );
 
-                buttons
+                    buttons
                     .spawn(button(
                         ButtonProps::default(),
                         (),
@@ -785,7 +884,7 @@ pub fn spawn_pause_menu(mut commands: Commands) {
                             next_state.set(GameState::MainMenu);
                         },
                     );
-            });
+                });
         });
 }
 
@@ -826,35 +925,37 @@ pub fn spawn_settings_menu(mut commands: Commands) {
             ));
 
             // Button container (fixed width for consistency)
-            parent.spawn(Node {
-                width: Val::Px(200.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(10.0),
-                ..default()
-            }).with_children(|buttons| {
-                buttons
-                    .spawn(button(
-                        ButtonProps::default(),
-                        (),
-                        (Spawn((
-                            Text::new("Back"),
-                            TextFont {
-                                font_size: 24.0,
-                                ..default()
+            parent
+                .spawn(Node {
+                    width: Val::Px(200.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(10.0),
+                    ..default()
+                })
+                .with_children(|buttons| {
+                    buttons
+                        .spawn(button(
+                            ButtonProps::default(),
+                            (),
+                            (Spawn((
+                                Text::new("Back"),
+                                TextFont {
+                                    font_size: 24.0,
+                                    ..default()
+                                },
+                            )),),
+                        ))
+                        .observe(
+                            |_trigger: On<Activate>,
+                             mut next_overlay: ResMut<NextState<MenuOverlay>>,
+                             origin: Res<SettingsOrigin>| {
+                                match origin.0 {
+                                    SettingsFrom::Paused => next_overlay.set(MenuOverlay::Paused),
+                                    SettingsFrom::MainMenu => next_overlay.set(MenuOverlay::None),
+                                }
                             },
-                        )),),
-                    ))
-                    .observe(
-                        |_trigger: On<Activate>,
-                         mut next_overlay: ResMut<NextState<MenuOverlay>>,
-                         origin: Res<SettingsOrigin>| {
-                            match origin.0 {
-                                SettingsFrom::Paused => next_overlay.set(MenuOverlay::Paused),
-                                SettingsFrom::MainMenu => next_overlay.set(MenuOverlay::None),
-                            }
-                        },
-                    );
-            });
+                        );
+                });
         });
 }
 
