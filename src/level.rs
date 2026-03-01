@@ -27,6 +27,7 @@ pub fn spawn_level(mut commands: Commands) {
                         GridPos(pos),
                         Tags(BTreeSet::from([Tag::Stone])),
                         Blocking,
+                        DespawnOnExit(GameState::Playing),
                     ));
                 }
                 '@' => {
@@ -36,6 +37,7 @@ pub fn spawn_level(mut commands: Commands) {
                         DerivedTags::default(),
                         Player,
                         Health(3),
+                        DespawnOnExit(GameState::Playing),
                     ));
                 }
                 'g' => {
@@ -46,6 +48,7 @@ pub fn spawn_level(mut commands: Commands) {
                         Enemy,
                         Health(2),
                         Blocking,
+                        DespawnOnExit(GameState::Playing),
                     ));
                 }
                 'T' => {
@@ -54,6 +57,7 @@ pub fn spawn_level(mut commands: Commands) {
                         Tags(BTreeSet::from([Tag::Wood, Tag::OnFire])),
                         DerivedTags::default(),
                         Pushable,
+                        DespawnOnExit(GameState::Playing),
                     ));
                 }
                 'B' => {
@@ -63,6 +67,7 @@ pub fn spawn_level(mut commands: Commands) {
                         DerivedTags::default(),
                         Pushable,
                         Blocking,
+                        DespawnOnExit(GameState::Playing),
                     ));
                 }
                 'o' => {
@@ -70,6 +75,7 @@ pub fn spawn_level(mut commands: Commands) {
                         GridPos(pos),
                         Tags(BTreeSet::from([Tag::Oil])),
                         DerivedTags::default(),
+                        DespawnOnExit(GameState::Playing),
                     ));
                 }
                 'I' => {
@@ -79,12 +85,14 @@ pub fn spawn_level(mut commands: Commands) {
                         DerivedTags::default(),
                         Pushable,
                         Blocking,
+                        DespawnOnExit(GameState::Playing),
                     ));
                 }
                 'E' => {
                     commands.spawn((
                         GridPos(pos),
                         Exit,
+                        DespawnOnExit(GameState::Playing),
                     ));
                 }
                 _ => {} // '.' or anything else = empty floor

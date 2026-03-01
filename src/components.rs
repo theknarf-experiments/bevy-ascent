@@ -51,10 +51,17 @@ pub struct Blocking;
 #[derive(States, Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 pub enum GameState {
     #[default]
+    MainMenu,
     Playing,
     Victory,
     GameOver,
 }
+
+#[derive(Component)]
+pub struct FlashTimer(pub Timer);
+
+#[derive(Component)]
+pub struct TooltipRoot;
 
 #[derive(SubStates, Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 #[source(GameState = GameState::Playing)]

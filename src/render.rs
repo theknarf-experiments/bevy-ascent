@@ -1,8 +1,9 @@
 use bevy::prelude::*;
+use bevy::picking::Pickable;
 
 use crate::components::*;
 
-const CELL_SIZE: f32 = 40.0;
+pub const CELL_SIZE: f32 = 40.0;
 const GRID_W: f32 = 12.0;
 const GRID_H: f32 = 12.0;
 
@@ -15,7 +16,7 @@ pub fn setup_camera(mut commands: Commands) {
     ));
 }
 
-fn glyph_for(
+pub fn glyph_for(
     player: Option<&Player>,
     enemy: Option<&Enemy>,
     exit: Option<&Exit>,
@@ -56,6 +57,49 @@ fn glyph_for(
         }
     }
     "?"
+}
+
+pub fn name_for(
+    player: Option<&Player>,
+    enemy: Option<&Enemy>,
+    exit: Option<&Exit>,
+    pushable: Option<&Pushable>,
+    blocking: Option<&Blocking>,
+    tags: Option<&Tags>,
+) -> &'static str {
+    if player.is_some() {
+        return "Player";
+    }
+    if enemy.is_some() {
+        return "Goblin";
+    }
+    if exit.is_some() {
+        return "Exit";
+    }
+    if let Some(tags) = tags {
+        if tags.0.contains(&Tag::Stone) {
+            return "Wall";
+        }
+        if tags.0.contains(&Tag::Ice) {
+            return "Ice";
+        }
+        if tags.0.contains(&Tag::Oil) {
+            return "Oil";
+        }
+        if tags.0.contains(&Tag::Wood) {
+            if tags.0.contains(&Tag::OnFire) && pushable.is_some() && blocking.is_none() {
+                return "Torch";
+            }
+            if blocking.is_some() {
+                return "Barrel";
+            }
+            return "Torch";
+        }
+        if tags.0.contains(&Tag::Wet) && !tags.0.contains(&Tag::Flesh) {
+            return "Water";
+        }
+    }
+    "Unknown"
 }
 
 fn color_for(
@@ -120,7 +164,7 @@ fn color_for(
 
 /// Marker for entities that already have a Text2d sprite
 #[derive(Component)]
-pub struct Sprite;
+pub struct HasSprite;
 
 pub fn spawn_sprites(
     mut commands: Commands,
@@ -136,7 +180,7 @@ pub fn spawn_sprites(
             Option<&Tags>,
             Option<&DerivedTags>,
         ),
-        Without<Sprite>,
+        Without<HasSprite>,
     >,
 ) {
     for (entity, grid_pos, player, enemy, exit, pushable, blocking, tags, derived) in
@@ -155,7 +199,14 @@ pub fn spawn_sprites(
             },
             TextColor(color),
             Transform::from_xyz(x, y, 0.0),
-            Sprite,
+            // Transparent sprite for picking hit-test
+            Sprite {
+                color: Color::srgba(0.0, 0.0, 0.0, 0.01),
+                custom_size: Some(Vec2::new(CELL_SIZE, CELL_SIZE)),
+                ..default()
+            },
+            Pickable::default(),
+            HasSprite,
         ));
     }
 }
@@ -178,12 +229,17 @@ pub fn sync_colors(
         Option<&Exit>,
         Option<&Pushable>,
         Option<&Blocking>,
+        Option<&FlashTimer>,
     )>,
 ) {
-    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking) in
+    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking, flash) in
         query.iter_mut()
     {
-        text_color.0 = color_for(tags, derived, player, enemy, exit);
+        if flash.is_some() {
+            text_color.0 = Color::WHITE;
+        } else {
+            text_color.0 = color_for(tags, derived, player, enemy, exit);
+        }
         let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags);
         **text = glyph.to_string();
     }

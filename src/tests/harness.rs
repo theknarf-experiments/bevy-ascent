@@ -21,10 +21,17 @@ impl GameHarness {
             Update,
             (check_win, check_loss).run_if(in_state(GameState::Playing)),
         );
-        app.add_systems(OnEnter(GameState::Victory), show_victory);
-        app.add_systems(OnEnter(GameState::GameOver), show_game_over);
-        app.add_systems(Startup, spawn_level);
-        app.update(); // run startup systems + initialize states
+        app.add_systems(OnEnter(GameState::Playing), spawn_level);
+
+        // Initialize (MainMenu state)
+        app.update();
+        // Transition to Playing
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::Playing);
+        app.update(); // transition to Playing, OnEnter runs spawn_level
+        app.update(); // flush spawn commands
+
         Self { app }
     }
 
@@ -33,7 +40,13 @@ impl GameHarness {
     /// spawning entities if needed.
     pub fn custom() -> Self {
         let mut app = Self::base_app();
-        app.update(); // initialize states
+        // Initialize (MainMenu state)
+        app.update();
+        // Transition to Playing so TurnPhase sub-state exists
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::Playing);
+        app.update(); // transition to Playing
         Self { app }
     }
 
@@ -44,10 +57,6 @@ impl GameHarness {
             Update,
             (check_win, check_loss).run_if(in_state(GameState::Playing)),
         );
-        self.app
-            .add_systems(OnEnter(GameState::Victory), show_victory);
-        self.app
-            .add_systems(OnEnter(GameState::GameOver), show_game_over);
     }
 
     fn base_app() -> App {

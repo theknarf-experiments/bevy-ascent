@@ -5,8 +5,9 @@ use crate::components::*;
 
 pub fn player_input(
     keys: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
     mut player_query: Query<&mut GridPos, With<Player>>,
-    blocking_query: Query<&GridPos, (With<Blocking>, Without<Player>, Without<Pushable>)>,
+    blocking_query: Query<(Entity, &GridPos), (With<Blocking>, Without<Player>, Without<Pushable>)>,
     mut pushable_query: Query<
         (Entity, &mut GridPos, Option<&Blocking>),
         (With<Pushable>, Without<Player>),
@@ -41,7 +42,7 @@ pub fn player_input(
     if let Some(push_entity) = pushable_at_target {
         let push_dest = target + dir;
         // Check push destination is free of all blocking (walls + other pushable-blocking)
-        let dest_blocked_wall = blocking_query.iter().any(|gp| gp.0 == push_dest);
+        let dest_blocked_wall = blocking_query.iter().any(|(_, gp)| gp.0 == push_dest);
         let dest_blocked_pushable = pushable_query
             .iter()
             .any(|(e, pos, _)| e != push_entity && pos.0 == push_dest);
@@ -62,17 +63,47 @@ pub fn player_input(
             if !pushable_is_blocking {
                 player_pos.0 = target;
                 next_phase.set(TurnPhase::EnemyTurn);
+            } else {
+                // Blocked — flash the blocking pushable
+                flash_entity(&mut commands, push_entity);
             }
         }
     } else {
         // No pushable at target — check if blocked by wall or enemy
-        let blocked_wall = blocking_query.iter().any(|gp| gp.0 == target);
+        let blocked_wall = blocking_query.iter().find(|(_, gp)| gp.0 == target);
         let blocked_pushable = pushable_query
             .iter()
-            .any(|(_, pos, b)| pos.0 == target && b.is_some());
-        if !blocked_wall && !blocked_pushable {
+            .find(|(_, pos, b)| pos.0 == target && b.is_some());
+        if blocked_wall.is_none() && blocked_pushable.is_none() {
             player_pos.0 = target;
             next_phase.set(TurnPhase::EnemyTurn);
+        } else {
+            // Flash the blocker
+            if let Some((entity, _)) = blocked_wall {
+                flash_entity(&mut commands, entity);
+            }
+            if let Some((entity, _, _)) = blocked_pushable {
+                flash_entity(&mut commands, entity);
+            }
+        }
+    }
+}
+
+fn flash_entity(commands: &mut Commands, entity: Entity) {
+    commands
+        .entity(entity)
+        .insert(FlashTimer(Timer::from_seconds(0.15, TimerMode::Once)));
+}
+
+pub fn tick_flash_timers(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut FlashTimer)>,
+) {
+    for (entity, mut flash) in query.iter_mut() {
+        flash.0.tick(time.delta());
+        if flash.0.is_finished() {
+            commands.entity(entity).remove::<FlashTimer>();
         }
     }
 }
@@ -179,6 +210,7 @@ pub fn apply_consequences(
             GridPos(pos),
             Tags(BTreeSet::from([Tag::Wet])),
             DerivedTags::default(),
+            DespawnOnExit(GameState::Playing),
         ));
     }
 
@@ -232,19 +264,5 @@ pub fn check_loss(
 ) {
     if player_query.iter().count() == 0 {
         next_state.set(GameState::GameOver);
-    }
-}
-
-pub fn show_victory(mut printed: Local<bool>) {
-    if !*printed {
-        *printed = true;
-        info!("*** VICTORY! You escaped the dungeon! ***");
-    }
-}
-
-pub fn show_game_over(mut printed: Local<bool>) {
-    if !*printed {
-        *printed = true;
-        info!("*** GAME OVER! You perished in the dungeon. ***");
     }
 }

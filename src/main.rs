@@ -3,16 +3,19 @@ mod datalog;
 mod level;
 mod render;
 mod systems;
+mod ui;
 #[cfg(test)]
 mod tests;
 
 use bevy::prelude::*;
+use bevy::feathers::FeathersPlugins;
 
 use components::*;
 use datalog::resolve_environment;
 use level::spawn_level;
 use render::*;
 use systems::*;
+use ui::*;
 
 fn main() {
     App::new()
@@ -24,12 +27,25 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(FeathersPlugins)
         .init_state::<GameState>()
         .add_sub_state::<TurnPhase>()
-        // Startup
-        .add_systems(Startup, (spawn_level, setup_camera))
-        // Sprite spawning (runs every frame to catch new entities)
-        .add_systems(Update, (spawn_sprites, sync_transforms, sync_colors))
+        .init_resource::<HoveredCell>()
+        // Global: camera persists across all states
+        .add_systems(Startup, setup_camera)
+        // Main Menu
+        .add_systems(OnEnter(GameState::MainMenu), spawn_main_menu)
+        // Playing
+        .add_systems(OnEnter(GameState::Playing), (spawn_level, spawn_tooltip))
+        .add_systems(
+            Update,
+            (spawn_sprites, sync_transforms, sync_colors, tick_flash_timers)
+                .run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(
+            Update,
+            update_tooltip.run_if(in_state(GameState::Playing)),
+        )
         // Turn phases
         .add_systems(
             Update,
@@ -52,8 +68,11 @@ fn main() {
             Update,
             (check_win, check_loss).run_if(in_state(GameState::Playing)),
         )
-        // End screens
-        .add_systems(OnEnter(GameState::Victory), show_victory)
-        .add_systems(OnEnter(GameState::GameOver), show_game_over)
+        // Victory / GameOver screens
+        .add_systems(OnEnter(GameState::Victory), spawn_victory_screen)
+        .add_systems(OnEnter(GameState::GameOver), spawn_game_over_screen)
+        // Global observers for hover tooltip
+        .add_observer(on_hover_over)
+        .add_observer(on_hover_out)
         .run();
 }
