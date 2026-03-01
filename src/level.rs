@@ -260,6 +260,28 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         DespawnOnExit(GameState::Playing),
                     ));
                 }
+                'D' => {
+                    // Dragon Boss
+                    commands.spawn((
+                        GridPos(pos),
+                        Tags(BTreeSet::from([Tag::Flesh, Tag::OnFire])),
+                        DerivedTags::default(),
+                        Enemy,
+                        Boss,
+                        Health(8),
+                        Blocking,
+                        FloorEntity,
+                        DespawnOnExit(GameState::Playing),
+                        DropTable(vec![
+                            (ItemKind::Gold, 100),
+                            (ItemKind::Gold, 100),
+                            (ItemKind::Gold, 100),
+                            (ItemKind::FireBlade, 80),
+                            (ItemKind::IronArmor, 50),
+                            (ItemKind::HealthPotion, 100),
+                        ]),
+                    ));
+                }
                 'C' => {
                     // Chest
                     commands.spawn((

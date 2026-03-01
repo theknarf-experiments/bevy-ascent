@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 
 use crate::components::*;
 use crate::datalog::resolve_environment;
+use crate::fov::update_fog_of_war;
 use crate::items::spawn_item;
 use crate::level::spawn_initial_floor;
 use crate::level_gen::fallback_floors;
@@ -75,6 +76,7 @@ impl GameHarness {
         app.init_resource::<SettingsOrigin>();
         app.init_resource::<GoldCount>();
         app.init_resource::<PlayerMoved>();
+        app.init_resource::<FogMap>();
         app.insert_resource(fallback_floors());
 
         // Turn-phase systems (same as main.rs, minus rendering and win/loss)
@@ -96,6 +98,13 @@ impl GameHarness {
         app.add_systems(
             Update,
             enemy_turn.run_if(in_state(TurnPhase::EnemyTurn)),
+        );
+        app.add_systems(
+            Update,
+            update_fog_of_war
+                .after(player_input)
+                .after(handle_floor_transition)
+                .run_if(in_state(GameState::Playing)),
         );
         app.add_systems(
             Update,
@@ -553,6 +562,38 @@ impl GameHarness {
                 FloorEntity,
             ))
             .id()
+    }
+
+    pub fn spawn_dragon(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Flesh, Tag::OnFire])),
+                DerivedTags::default(),
+                Enemy,
+                Boss,
+                Health(8),
+                Blocking,
+                DropTable(vec![
+                    (ItemKind::Gold, 100),
+                    (ItemKind::Gold, 100),
+                    (ItemKind::Gold, 100),
+                    (ItemKind::FireBlade, 80),
+                    (ItemKind::IronArmor, 50),
+                    (ItemKind::HealthPotion, 100),
+                ]),
+            ))
+            .id()
+    }
+
+    pub fn fog_at(&mut self, pos: IVec2) -> TileVisibility {
+        self.app.world_mut().resource::<FogMap>().get(pos.x, pos.y)
+    }
+
+    /// Force a fog of war update cycle.
+    pub fn update_fog(&mut self) {
+        self.app.update();
     }
 
     /// Expose app for param-validation tests that need direct access.

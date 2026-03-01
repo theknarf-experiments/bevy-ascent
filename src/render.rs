@@ -28,9 +28,13 @@ pub fn glyph_for(
     stairs_up: Option<&StairsUp>,
     item_kind: Option<&ItemKind>,
     chest: Option<&Chest>,
+    boss: Option<&Boss>,
 ) -> &'static str {
     if player.is_some() {
         return "@";
+    }
+    if boss.is_some() {
+        return "D";
     }
     // Enemy subtypes based on tags
     if enemy.is_some() {
@@ -120,9 +124,13 @@ pub fn name_for(
     stairs_up: Option<&StairsUp>,
     item_kind: Option<&ItemKind>,
     chest: Option<&Chest>,
+    boss: Option<&Boss>,
 ) -> &'static str {
     if player.is_some() {
         return "Player";
+    }
+    if boss.is_some() {
+        return "Dragon";
     }
     if enemy.is_some() {
         if let Some(tags) = tags {
@@ -210,6 +218,7 @@ fn color_for(
     stairs_up: Option<&StairsUp>,
     item_kind: Option<&ItemKind>,
     chest: Option<&Chest>,
+    boss: Option<&Boss>,
 ) -> Color {
     // Check derived tags first for dynamic state
     if let Some(dt) = derived {
@@ -263,6 +272,9 @@ fn color_for(
     if player.is_some() {
         return Color::srgb(0.2, 1.0, 0.2); // bright green
     }
+    if boss.is_some() {
+        return Color::srgb(0.9, 0.2, 0.0); // deep red-orange
+    }
     if enemy.is_some() {
         if let Some(tags) = tags {
             if tags.0.contains(&Tag::Poisoned) {
@@ -306,6 +318,21 @@ fn color_for(
 #[derive(Component)]
 pub struct HasSprite;
 
+fn apply_fog(color: Color, visibility: TileVisibility, is_enemy: bool) -> Color {
+    match visibility {
+        TileVisibility::Visible => color,
+        TileVisibility::Explored => {
+            if is_enemy {
+                Color::srgba(0.0, 0.0, 0.0, 0.0)
+            } else {
+                let Srgba { red, green, blue, alpha } = color.to_srgba();
+                Color::srgba(red * 0.5, green * 0.5, blue * 0.5, alpha * 0.3)
+            }
+        }
+        TileVisibility::Unexplored => Color::srgba(0.0, 0.0, 0.0, 0.0),
+    }
+}
+
 pub fn spawn_sprites(
     mut commands: Commands,
     query: Query<
@@ -323,15 +350,24 @@ pub fn spawn_sprites(
             Option<&StairsUp>,
             Option<&ItemKind>,
             Option<&Chest>,
+            Option<&Boss>,
         ),
         Without<HasSprite>,
     >,
+    fog_map: Res<FogMap>,
 ) {
-    for (entity, grid_pos, player, enemy, exit, pushable, blocking, tags, derived, stairs_down, stairs_up, item_kind, chest) in
+    for (entity, grid_pos, player, enemy, exit, pushable, blocking, tags, derived, stairs_down, stairs_up, item_kind, chest, boss) in
         query.iter()
     {
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest);
-        let color = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up, item_kind, chest);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest, boss);
+        let mut color = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up, item_kind, chest, boss);
+
+        // Apply fog (player is always visible)
+        if player.is_none() {
+            let vis = fog_map.get(grid_pos.0.x, grid_pos.0.y);
+            color = apply_fog(color, vis, enemy.is_some() || boss.is_some());
+        }
+
         let x = grid_pos.0.x as f32 * CELL_SIZE;
         let y = -(grid_pos.0.y as f32) * CELL_SIZE;
 
@@ -374,21 +410,36 @@ pub fn sync_colors(
         Option<&Pushable>,
         Option<&Blocking>,
         Option<&FlashTimer>,
-        Option<&StairsDown>,
-        Option<&StairsUp>,
-        Option<&ItemKind>,
-        Option<&Chest>,
+        (
+            Option<&StairsDown>,
+            Option<&StairsUp>,
+            Option<&ItemKind>,
+            Option<&Chest>,
+            Option<&Boss>,
+            Option<&GridPos>,
+        ),
     )>,
+    fog_map: Res<FogMap>,
 ) {
-    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking, flash, stairs_down, stairs_up, item_kind, chest) in
+    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking, flash, (stairs_down, stairs_up, item_kind, chest, boss, grid_pos)) in
         query.iter_mut()
     {
         if flash.is_some() {
             text_color.0 = Color::WHITE;
         } else {
-            text_color.0 = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up, item_kind, chest);
+            let mut color = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up, item_kind, chest, boss);
+
+            // Apply fog (player is always visible)
+            if player.is_none() {
+                if let Some(gp) = grid_pos {
+                    let vis = fog_map.get(gp.0.x, gp.0.y);
+                    color = apply_fog(color, vis, enemy.is_some() || boss.is_some());
+                }
+            }
+
+            text_color.0 = color;
         }
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest, boss);
         **text = glyph.to_string();
     }
 }

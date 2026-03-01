@@ -1,5 +1,6 @@
 mod components;
 mod datalog;
+mod fov;
 mod items;
 mod level;
 mod level_gen;
@@ -14,6 +15,7 @@ use bevy::feathers::FeathersPlugins;
 
 use components::*;
 use datalog::resolve_environment;
+use fov::update_fog_of_war;
 use level::spawn_initial_floor;
 use level_gen::generate_levels;
 use render::*;
@@ -41,6 +43,7 @@ fn main() {
         .init_resource::<SettingsOrigin>()
         .init_resource::<GoldCount>()
         .init_resource::<PlayerMoved>()
+        .init_resource::<FogMap>()
         // Global: camera persists across all states
         .add_systems(Startup, setup_camera)
         // Main Menu
@@ -60,7 +63,20 @@ fn main() {
         )
         .add_systems(
             Update,
-            (spawn_sprites, sync_transforms, sync_colors, tick_flash_timers)
+            update_fog_of_war
+                .after(player_input)
+                .after(handle_floor_transition)
+                .run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(
+            Update,
+            (spawn_sprites, sync_transforms, tick_flash_timers)
+                .run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(
+            Update,
+            sync_colors
+                .after(update_fog_of_war)
                 .run_if(in_state(GameState::Playing)),
         )
         .add_systems(

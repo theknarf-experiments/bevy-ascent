@@ -55,15 +55,12 @@ floor(X,Y) :- interior(X,Y), not wall(X,Y).
 1 { mushroom(X,Y) : floor(X,Y) } 1 :- floor_num(2).
 1 { spark(X,Y) : floor(X,Y) } 1 :- floor_num(2).
 
-% Floor 3 (boss): ice golem, shock eel, goblin, lightning rod, metal crate, water puddle
+% Floor 3 (boss): dragon, goblin, 2 water puddles
 1 { stairs_up(X,Y) : floor(X,Y), X <= 5 } 1 :- floor_num(3).
 1 { exit(X,Y) : floor(X,Y), Y >= 6 } 1 :- floor_num(3).
-1 { ice_golem(X,Y) : floor(X,Y) } 1 :- floor_num(3).
-1 { shock_eel(X,Y) : floor(X,Y) } 1 :- floor_num(3).
+1 { dragon(X,Y) : floor(X,Y), Y >= 4, Y <= 8, X >= 4, X <= 8 } 1 :- floor_num(3).
 1 { goblin(X,Y) : floor(X,Y) } 1 :- floor_num(3).
-1 { lightning_rod(X,Y) : floor(X,Y) } 1 :- floor_num(3).
-1 { metal_crate(X,Y) : floor(X,Y) } 1 :- floor_num(3).
-1 { water(X,Y) : floor(X,Y) } 1 :- floor_num(3).
+2 { water(X,Y) : floor(X,Y) } 2 :- floor_num(3).
 
 % All floors: 2 torches, 2 barrels, 2-4 oil, 1-2 chests, 0-2 gold, 0-1 health potion
 2 { torch(X,Y) : floor(X,Y) } 2.
@@ -94,6 +91,7 @@ entity_cell(X,Y) :- ice_golem(X,Y).
 entity_cell(X,Y) :- shock_eel(X,Y).
 entity_cell(X,Y) :- lightning_rod(X,Y).
 entity_cell(X,Y) :- metal_crate(X,Y).
+entity_cell(X,Y) :- dragon(X,Y).
 entity_cell(X,Y) :- chest(X,Y).
 entity_cell(X,Y) :- gold(X,Y).
 entity_cell(X,Y) :- health_pot(X,Y).
@@ -121,7 +119,8 @@ entity_count(X,Y,N) :- floor(X,Y), N = #count{
     19 : metal_crate(X,Y);
     20 : chest(X,Y);
     21 : gold(X,Y);
-    22 : health_pot(X,Y)
+    22 : health_pot(X,Y);
+    23 : dragon(X,Y)
 }.
 :- entity_count(X,Y,N), N > 1.
 
@@ -135,6 +134,7 @@ enemy_at(X,Y) :- fire_imp(X,Y).
 enemy_at(X,Y) :- poison_spider(X,Y).
 enemy_at(X,Y) :- ice_golem(X,Y).
 enemy_at(X,Y) :- shock_eel(X,Y).
+enemy_at(X,Y) :- dragon(X,Y).
 
 :- enemy_at(GX,GY), entry(EX,EY), |GX-EX| + |GY-EY| <= 1.
 
@@ -170,6 +170,7 @@ reachable(X,Y2) :- reachable(X,Y1), floor(X,Y2), Y2 = Y1-1.
 #show chest/2.
 #show gold/2.
 #show health_pot/2.
+#show dragon/2.
 "#;
 
 #[derive(Debug)]
@@ -266,6 +267,7 @@ fn build_grid_from_atoms(atoms: &[String]) -> String {
                     "shock_eel" => 'e',
                     "lightning_rod" => '!',
                     "metal_crate" => 'M',
+                    "dragon" => 'D',
                     "chest" => 'C',
                     "gold" => '$',
                     "health_pot" => 'H',
@@ -365,14 +367,14 @@ pub fn fallback_floors() -> GeneratedFloors {
             "\
 ############
 #<.........#
-#..........#
-#....o..M..#
-#...##..g..#
-#...##.!.C.#
+#.....~....#
+#....o.....#
+#...##.....#
+#...##.D.C.#
 #..B...T.~.#
-#.....e....#
-#..T..##...#
-#.i...##.$.#
+#..........#
+#..T..##.g.#
+#.....##.$.#
 #........E.#
 ############"
                 .to_string(),
@@ -465,6 +467,8 @@ mod tests {
             3 => {
                 assert_eq!(stairs_up_count, 1, "floor 3 should have 1 stairs up");
                 assert_eq!(exit_count, 1, "floor 3 should have 1 exit");
+                let dragon_count = lines.iter().flat_map(|l| l.chars()).filter(|&c| c == 'D').count();
+                assert_eq!(dragon_count, 1, "floor 3 should have 1 dragon");
             }
             _ => panic!("unexpected floor_num"),
         }
@@ -487,7 +491,7 @@ mod tests {
                         }
                         entity_positions.insert((x, y));
                     }
-                    'g' | 'T' | 'B' | 'o' | '>' | 'E' | '~' | 'p' | 'f' | 'i' | 's' | 'e' | 'X' | 'M' | 'm' | 'z' | '!' | 'C' | '$' | 'H' => {
+                    'g' | 'T' | 'B' | 'o' | '>' | 'E' | '~' | 'p' | 'f' | 'i' | 's' | 'e' | 'X' | 'M' | 'm' | 'z' | '!' | 'C' | '$' | 'H' | 'D' => {
                         entity_positions.insert((x, y));
                     }
                     _ => {}

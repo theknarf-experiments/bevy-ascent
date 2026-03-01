@@ -343,11 +343,22 @@ pub fn use_consumable(
     commands.entity(item_entity).despawn();
 }
 
+/// Returns the cardinal direction (unit vector) that best aligns with diff.
+/// Prefers the axis with the larger absolute component; horizontal on tie.
+fn best_cardinal_direction(diff: IVec2) -> IVec2 {
+    if diff.x.abs() >= diff.y.abs() {
+        IVec2::new(diff.x.signum(), 0)
+    } else {
+        IVec2::new(0, diff.y.signum())
+    }
+}
+
 pub fn enemy_turn(
+    mut commands: Commands,
     player_query: Query<(&GridPos, &Inventory), (With<Player>, Without<Enemy>)>,
-    mut enemy_query: Query<(Entity, &mut GridPos, &mut Health), (With<Enemy>, Without<Player>)>,
+    mut enemy_query: Query<(Entity, &mut GridPos, &mut Health, Option<&Boss>), (With<Enemy>, Without<Player>)>,
     mut player_health: Query<&mut Health, (With<Player>, Without<Enemy>)>,
-    blocking_query: Query<(Entity, &GridPos), (With<Blocking>, Without<Enemy>, Without<Player>)>,
+    blocking_query: Query<(Entity, &GridPos, Option<&Tags>), (With<Blocking>, Without<Enemy>, Without<Player>)>,
     mut next_phase: ResMut<NextState<TurnPhase>>,
     armor_query: Query<&ArmorDefense, (With<Item>, Without<Player>, Without<Enemy>)>,
 ) {
@@ -364,20 +375,53 @@ pub fn enemy_turn(
         .unwrap_or(0);
 
     // Collect all blocking positions (non-enemy)
-    let static_blocking: Vec<IVec2> = blocking_query.iter().map(|(_, pos)| pos.0).collect();
+    let static_blocking: Vec<IVec2> = blocking_query.iter().map(|(_, pos, _)| pos.0).collect();
+
+    // Collect wall positions (Stone-tagged blocking) for fire breath stopping
+    let wall_positions: Vec<IVec2> = blocking_query
+        .iter()
+        .filter(|(_, _, tags)| tags.as_ref().is_some_and(|t| t.0.contains(&Tag::Stone)))
+        .map(|(_, pos, _)| pos.0)
+        .collect();
 
     // Collect current enemy positions for collision avoidance
     let enemy_positions: Vec<(Entity, IVec2)> = enemy_query
         .iter()
-        .map(|(e, pos, _)| (e, pos.0))
+        .map(|(e, pos, _, _)| (e, pos.0))
         .collect();
 
     // Compute moves for each enemy
     let mut moves: Vec<(Entity, IVec2)> = Vec::new();
+    // Fire breath positions to spawn after iteration
+    let mut fire_spawns: Vec<IVec2> = Vec::new();
 
-    for (entity, pos, _) in enemy_query.iter() {
+    for (entity, pos, _, boss) in enemy_query.iter() {
         let epos = pos.0;
         let diff = player_tile - epos;
+
+        // Boss AI: Dragon stays put, breathes fire or melee attacks
+        if boss.is_some() {
+            if diff.x.abs() + diff.y.abs() == 1 {
+                // Adjacent: melee for 2 damage (reduced by armor)
+                if let Ok(mut ph) = player_health.single_mut() {
+                    let dmg = (2 - armor_def).max(0);
+                    ph.0 -= dmg;
+                }
+            } else {
+                // Breathe fire in a line toward player (up to 3 tiles)
+                let dir = best_cardinal_direction(diff);
+                for i in 1..=3 {
+                    let fire_pos = epos + dir * i;
+                    // Stop at walls
+                    if wall_positions.contains(&fire_pos) {
+                        break;
+                    }
+                    fire_spawns.push(fire_pos);
+                }
+            }
+            // Boss does NOT move
+            continue;
+        }
 
         // If adjacent to player, attack
         if diff.x.abs() + diff.y.abs() == 1 {
@@ -423,10 +467,21 @@ pub fn enemy_turn(
     }
 
     // Apply moves
-    for (mut_entity, mut pos, _) in enemy_query.iter_mut() {
+    for (mut_entity, mut pos, _, _) in enemy_query.iter_mut() {
         if let Some((_, to)) = moves.iter().find(|(e, _)| *e == mut_entity) {
             pos.0 = *to;
         }
+    }
+
+    // Spawn fire breath entities
+    for fire_pos in fire_spawns {
+        commands.spawn((
+            GridPos(fire_pos),
+            Tags(BTreeSet::from([Tag::OnFire])),
+            DerivedTags::default(),
+            FloorEntity,
+            DespawnOnExit(GameState::Playing),
+        ));
     }
 
     next_phase.set(TurnPhase::ResolveEnvironment);
@@ -572,6 +627,7 @@ pub fn handle_floor_transition(
     mut player_query: Query<(Entity, &mut GridPos), With<Player>>,
     mut current_floor: ResMut<CurrentFloor>,
     generated: Res<GeneratedFloors>,
+    mut fog_map: ResMut<FogMap>,
 ) {
     let Some(going_down) = transition.0.take() else {
         return;
@@ -582,6 +638,9 @@ pub fn handle_floor_transition(
     } else {
         current_floor.0.saturating_sub(1).max(1)
     };
+
+    // Reset fog for new floor
+    fog_map.reset();
 
     // Despawn all floor entities
     for entity in floor_entities.iter() {
@@ -612,10 +671,12 @@ pub fn reset_game_resources(
     mut victory: ResMut<VictoryAchieved>,
     mut floor: ResMut<CurrentFloor>,
     mut gold: ResMut<GoldCount>,
+    mut fog_map: ResMut<FogMap>,
 ) {
     victory.0 = false;
     floor.0 = 0;
     gold.0 = 0;
+    fog_map.reset();
 }
 
 pub fn check_loss(

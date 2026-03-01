@@ -1440,3 +1440,256 @@ fn player_starts_with_empty_inventory() {
     assert!(armor.is_none(), "player should start with no armor");
     assert!(consumables.is_empty(), "player should start with no consumables");
 }
+
+// =========================================================================
+// Fog of War tests
+// =========================================================================
+
+#[test]
+fn fog_initial_state_is_all_unexplored() {
+    let mut game = GameHarness::custom();
+    for y in 0..12 {
+        for x in 0..12 {
+            assert_eq!(
+                game.fog_at(IVec2::new(x, y)),
+                TileVisibility::Unexplored,
+                "tile ({},{}) should start Unexplored", x, y
+            );
+        }
+    }
+}
+
+#[test]
+fn fog_player_tile_is_visible() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.update_fog();
+    assert_eq!(
+        game.fog_at(IVec2::new(5, 5)),
+        TileVisibility::Visible,
+        "player's tile should be Visible"
+    );
+}
+
+#[test]
+fn fog_open_area_within_radius_is_visible() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.update_fog();
+    // Tile 3 tiles away in open area should be visible (within radius 5)
+    assert_eq!(
+        game.fog_at(IVec2::new(5, 2)),
+        TileVisibility::Visible,
+        "nearby tile in open area should be Visible"
+    );
+    // Tile 4 tiles away diagonally (4²+4²=32 > 25) should be unexplored
+    assert_eq!(
+        game.fog_at(IVec2::new(1, 1)),
+        TileVisibility::Unexplored,
+        "tile outside radius should stay Unexplored"
+    );
+}
+
+#[test]
+fn fog_wall_blocks_line_of_sight() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_wall(IVec2::new(5, 4)); // wall directly above player
+    game.update_fog();
+    // The wall tile itself should be visible (you see the wall face)
+    assert_eq!(
+        game.fog_at(IVec2::new(5, 4)),
+        TileVisibility::Visible,
+        "wall tile should be visible"
+    );
+    // Tile behind the wall should be blocked
+    assert_eq!(
+        game.fog_at(IVec2::new(5, 3)),
+        TileVisibility::Unexplored,
+        "tile behind wall should stay Unexplored"
+    );
+}
+
+#[test]
+fn fog_previously_visible_becomes_explored() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.update_fog();
+    assert_eq!(
+        game.fog_at(IVec2::new(5, 2)),
+        TileVisibility::Visible,
+        "tile near player should be Visible"
+    );
+
+    // Move player far away
+    {
+        let w = game.app_mut().world_mut();
+        let mut q = w.query_filtered::<&mut GridPos, With<Player>>();
+        for mut gp in q.iter_mut(w) {
+            gp.0 = IVec2::new(1, 10);
+        }
+    }
+    game.update_fog();
+
+    assert_eq!(
+        game.fog_at(IVec2::new(5, 2)),
+        TileVisibility::Explored,
+        "previously visible tile far from player should become Explored"
+    );
+}
+
+#[test]
+fn fog_resets_on_new_game() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.update_fog();
+    assert_eq!(game.fog_at(IVec2::new(5, 5)), TileVisibility::Visible);
+
+    // Simulate a game reset
+    game.app_mut().world_mut().resource_mut::<FogMap>().reset();
+    assert_eq!(
+        game.fog_at(IVec2::new(5, 5)),
+        TileVisibility::Unexplored,
+        "fog should reset to all Unexplored on new game"
+    );
+}
+
+// =========================================================================
+// Dragon Boss tests
+// =========================================================================
+
+#[test]
+fn dragon_breathes_fire_toward_player() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(2, 5));
+    game.spawn_dragon(IVec2::new(8, 5));
+
+    // Trigger enemy turn — dragon should breathe fire toward player (left)
+    game.app_mut()
+        .world_mut()
+        .resource_mut::<NextState<TurnPhase>>()
+        .set(TurnPhase::EnemyTurn);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Fire should spawn at (7,5), (6,5), (5,5) — 3 tiles toward player
+    let fire_at_7 = game.tags_at(IVec2::new(7, 5));
+    let fire_at_6 = game.tags_at(IVec2::new(6, 5));
+    let fire_at_5 = game.tags_at(IVec2::new(5, 5));
+    assert!(
+        fire_at_7.iter().any(|t| t.contains(&Tag::OnFire)),
+        "fire should spawn at (7,5)"
+    );
+    assert!(
+        fire_at_6.iter().any(|t| t.contains(&Tag::OnFire)),
+        "fire should spawn at (6,5)"
+    );
+    assert!(
+        fire_at_5.iter().any(|t| t.contains(&Tag::OnFire)),
+        "fire should spawn at (5,5)"
+    );
+}
+
+#[test]
+fn dragon_melee_attacks_adjacent_player() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_dragon(IVec2::new(5, 6));
+
+    game.app_mut()
+        .world_mut()
+        .resource_mut::<NextState<TurnPhase>>()
+        .set(TurnPhase::EnemyTurn);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Dragon deals 2 melee damage + 1 fire damage (OnFire tag) via environment resolve
+    assert_eq!(
+        game.player_health(),
+        Some(2),
+        "dragon should deal 2 melee + 1 fire damage"
+    );
+}
+
+#[test]
+fn dragon_fire_stops_at_wall() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(2, 5));
+    game.spawn_dragon(IVec2::new(8, 5));
+    game.spawn_wall(IVec2::new(6, 5)); // wall blocking fire line
+
+    game.app_mut()
+        .world_mut()
+        .resource_mut::<NextState<TurnPhase>>()
+        .set(TurnPhase::EnemyTurn);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Fire at (7,5) should exist (before wall)
+    let fire_at_7 = game.tags_at(IVec2::new(7, 5));
+    assert!(
+        fire_at_7.iter().any(|t| t.contains(&Tag::OnFire)),
+        "fire should spawn at (7,5) before wall"
+    );
+    // Fire at (5,5) should NOT exist (behind wall)
+    let fire_at_5 = game.tags_at(IVec2::new(5, 5));
+    assert!(
+        !fire_at_5.iter().any(|t| t.contains(&Tag::OnFire)),
+        "fire should not pass through wall"
+    );
+}
+
+#[test]
+fn dragon_does_not_move() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(2, 5));
+    let dragon = game.spawn_dragon(IVec2::new(8, 5));
+
+    game.app_mut()
+        .world_mut()
+        .resource_mut::<NextState<TurnPhase>>()
+        .set(TurnPhase::EnemyTurn);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert_eq!(
+        game.entity_pos(dragon),
+        Some(IVec2::new(8, 5)),
+        "dragon should not move"
+    );
+}
+
+#[test]
+fn dragon_is_immune_to_fire() {
+    let mut game = GameHarness::custom();
+    let dragon = game.spawn_dragon(IVec2::new(5, 5));
+    game.spawn_torch(IVec2::new(6, 5)); // adjacent fire
+    game.resolve();
+    assert_eq!(
+        game.entity_health(dragon),
+        Some(8),
+        "dragon should be immune to fire (has OnFire tag)"
+    );
+}
+
+#[test]
+fn dragon_fire_ignites_barrel() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(2, 5));
+    game.spawn_dragon(IVec2::new(8, 5));
+    game.spawn_barrel(IVec2::new(7, 5)); // barrel in fire breath path
+
+    // Dragon breathes fire
+    game.app_mut()
+        .world_mut()
+        .resource_mut::<NextState<TurnPhase>>()
+        .set(TurnPhase::EnemyTurn);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Fire entity at (7,5) should have been spawned — now resolve to see systemic effects
+    game.resolve_only();
+
+    // The barrel at (7,5) should have derived OnFire from adjacent/co-located fire
+    let derived = game.derived_at(IVec2::new(7, 5));
+    let has_on_fire = derived.iter().any(|d| d.contains(&Tag::OnFire));
+    assert!(
+        has_on_fire,
+        "dragon fire should ignite barrel via systemic fire spread"
+    );
+}

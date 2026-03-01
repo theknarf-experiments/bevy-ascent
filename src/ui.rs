@@ -300,8 +300,10 @@ pub fn update_tooltip(
         Option<&StairsUp>,
         Option<&ItemKind>,
         Option<&Chest>,
+        Option<&Boss>,
     )>,
     window_query: Query<&Window>,
+    fog_map: Res<FogMap>,
 ) {
     let Ok((mut node, mut visibility, children)) = tooltip_query.single_mut() else {
         return;
@@ -312,14 +314,27 @@ pub fn update_tooltip(
         return;
     };
 
+    // Check fog visibility
+    let tile_vis = fog_map.get(cell.x, cell.y);
+    if tile_vis == TileVisibility::Unexplored {
+        *visibility = Visibility::Hidden;
+        return;
+    }
+
     // Collect entities at this cell
     let mut lines: Vec<String> = Vec::new();
-    for (grid_pos, player, enemy, exit, pushable, blocking, tags, health, stairs_down, stairs_up, item_kind, chest) in entity_query.iter() {
+    for (grid_pos, player, enemy, exit, pushable, blocking, tags, health, stairs_down, stairs_up, item_kind, chest, boss) in entity_query.iter() {
         if grid_pos.0 != cell {
             continue;
         }
-        let name = name_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest);
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest);
+
+        // In explored (not visible) tiles, hide enemies
+        if tile_vis == TileVisibility::Explored && (enemy.is_some() || boss.is_some()) {
+            continue;
+        }
+
+        let name = name_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest, boss);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest, boss);
 
         let mut line = format!("{} ({})", name, glyph);
 
