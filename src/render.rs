@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy::picking::Pickable;
 
 use crate::components::*;
+use crate::items::{item_glyph, item_name, item_color};
 
 pub const CELL_SIZE: f32 = 40.0;
 const GRID_W: f32 = 12.0;
@@ -25,6 +26,8 @@ pub fn glyph_for(
     tags: Option<&Tags>,
     stairs_down: Option<&StairsDown>,
     stairs_up: Option<&StairsUp>,
+    item_kind: Option<&ItemKind>,
+    chest: Option<&Chest>,
 ) -> &'static str {
     if player.is_some() {
         return "@";
@@ -46,6 +49,12 @@ pub fn glyph_for(
             }
         }
         return "g"; // Goblin (default)
+    }
+    if let Some(kind) = item_kind {
+        return item_glyph(kind);
+    }
+    if chest.is_some() {
+        return "C";
     }
     if exit.is_some() {
         return "E";
@@ -109,6 +118,8 @@ pub fn name_for(
     tags: Option<&Tags>,
     stairs_down: Option<&StairsDown>,
     stairs_up: Option<&StairsUp>,
+    item_kind: Option<&ItemKind>,
+    chest: Option<&Chest>,
 ) -> &'static str {
     if player.is_some() {
         return "Player";
@@ -129,6 +140,12 @@ pub fn name_for(
             }
         }
         return "Goblin";
+    }
+    if let Some(kind) = item_kind {
+        return item_name(kind);
+    }
+    if chest.is_some() {
+        return "Chest";
     }
     if exit.is_some() {
         return "Exit";
@@ -191,6 +208,8 @@ fn color_for(
     exit: Option<&Exit>,
     stairs_down: Option<&StairsDown>,
     stairs_up: Option<&StairsUp>,
+    item_kind: Option<&ItemKind>,
+    chest: Option<&Chest>,
 ) -> Color {
     // Check derived tags first for dynamic state
     if let Some(dt) = derived {
@@ -230,6 +249,15 @@ fn color_for(
         if tags.0.contains(&Tag::Explosive) {
             return Color::srgb(1.0, 0.4, 0.1); // orange-red
         }
+    }
+
+    // Item-specific colors
+    if let Some(kind) = item_kind {
+        return item_color(kind);
+    }
+
+    if chest.is_some() {
+        return Color::srgb(0.6, 0.4, 0.2); // brown
     }
 
     if player.is_some() {
@@ -293,15 +321,17 @@ pub fn spawn_sprites(
             Option<&DerivedTags>,
             Option<&StairsDown>,
             Option<&StairsUp>,
+            Option<&ItemKind>,
+            Option<&Chest>,
         ),
         Without<HasSprite>,
     >,
 ) {
-    for (entity, grid_pos, player, enemy, exit, pushable, blocking, tags, derived, stairs_down, stairs_up) in
+    for (entity, grid_pos, player, enemy, exit, pushable, blocking, tags, derived, stairs_down, stairs_up, item_kind, chest) in
         query.iter()
     {
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up);
-        let color = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest);
+        let color = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up, item_kind, chest);
         let x = grid_pos.0.x as f32 * CELL_SIZE;
         let y = -(grid_pos.0.y as f32) * CELL_SIZE;
 
@@ -346,17 +376,19 @@ pub fn sync_colors(
         Option<&FlashTimer>,
         Option<&StairsDown>,
         Option<&StairsUp>,
+        Option<&ItemKind>,
+        Option<&Chest>,
     )>,
 ) {
-    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking, flash, stairs_down, stairs_up) in
+    for (mut text_color, mut text, tags, derived, player, enemy, exit, pushable, blocking, flash, stairs_down, stairs_up, item_kind, chest) in
         query.iter_mut()
     {
         if flash.is_some() {
             text_color.0 = Color::WHITE;
         } else {
-            text_color.0 = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up);
+            text_color.0 = color_for(tags, derived, player, enemy, exit, stairs_down, stairs_up, item_kind, chest);
         }
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest);
         **text = glyph.to_string();
     }
 }

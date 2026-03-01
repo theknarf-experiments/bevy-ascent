@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 
 use crate::components::*;
 use crate::datalog::resolve_environment;
+use crate::items::spawn_item;
 use crate::level::spawn_initial_floor;
 use crate::level_gen::fallback_floors;
 use crate::systems::*;
@@ -72,12 +73,19 @@ impl GameHarness {
         app.init_resource::<FloorTransition>();
         app.init_state::<MenuOverlay>();
         app.init_resource::<SettingsOrigin>();
+        app.init_resource::<GoldCount>();
+        app.init_resource::<PlayerMoved>();
         app.insert_resource(fallback_floors());
 
         // Turn-phase systems (same as main.rs, minus rendering and win/loss)
         app.add_systems(
             Update,
-            player_input.run_if(in_state(TurnPhase::WaitingForInput)),
+            (
+                player_input,
+                pickup_items.after(player_input),
+                use_consumable,
+            )
+                .run_if(in_state(TurnPhase::WaitingForInput)),
         );
         app.add_systems(
             Update,
@@ -229,6 +237,16 @@ impl GameHarness {
         *self.app.world_mut().resource::<State<GameState>>().get()
     }
 
+    pub fn gold_count(&mut self) -> u32 {
+        self.app.world_mut().resource::<GoldCount>().0
+    }
+
+    pub fn player_inventory(&mut self) -> Option<(Option<Entity>, Option<Entity>, Vec<Entity>)> {
+        let w = self.app.world_mut();
+        let mut q = w.query_filtered::<&Inventory, With<Player>>();
+        q.iter(w).next().map(|inv| (inv.weapon, inv.armor, inv.consumables.clone()))
+    }
+
     pub fn tags_at(&mut self, pos: IVec2) -> Vec<BTreeSet<Tag>> {
         let w = self.app.world_mut();
         let mut q = w.query::<(&GridPos, &Tags)>();
@@ -247,6 +265,12 @@ impl GameHarness {
             .collect()
     }
 
+    pub fn item_count_at(&mut self, pos: IVec2) -> usize {
+        let w = self.app.world_mut();
+        let mut q = w.query_filtered::<&GridPos, With<Item>>();
+        q.iter(w).filter(|gp| gp.0 == pos).count()
+    }
+
     // ---- Spawn helpers (for custom harness) ----
 
     pub fn spawn_player(&mut self, pos: IVec2) -> Entity {
@@ -258,6 +282,7 @@ impl GameHarness {
                 DerivedTags::default(),
                 Player,
                 Health(5),
+                Inventory::default(),
             ))
             .id()
     }
@@ -272,6 +297,21 @@ impl GameHarness {
                 Enemy,
                 Health(2),
                 Blocking,
+            ))
+            .id()
+    }
+
+    pub fn spawn_enemy_with_drops(&mut self, pos: IVec2, drops: Vec<(ItemKind, u32)>) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Flesh])),
+                DerivedTags::default(),
+                Enemy,
+                Health(1),
+                Blocking,
+                DropTable(drops),
             ))
             .id()
     }
@@ -490,6 +530,27 @@ impl GameHarness {
                 DerivedTags::default(),
                 Enemy,
                 Health(2),
+            ))
+            .id()
+    }
+
+    pub fn spawn_item(&mut self, kind: ItemKind, pos: IVec2) -> Entity {
+        let mut commands = self.app.world_mut().commands();
+        let e = spawn_item(&mut commands, kind, pos);
+        self.app.update(); // flush commands
+        e
+    }
+
+    pub fn spawn_chest(&mut self, pos: IVec2) -> Entity {
+        self.app
+            .world_mut()
+            .spawn((
+                GridPos(pos),
+                Tags(BTreeSet::from([Tag::Wood])),
+                DerivedTags::default(),
+                Chest,
+                Blocking,
+                FloorEntity,
             ))
             .id()
     }

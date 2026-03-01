@@ -1012,3 +1012,431 @@ fn water_puddle_conducts_electricity() {
         "electricity should conduct through chain of water puddles"
     );
 }
+
+// =========================================================================
+// Item pickup tests
+// =========================================================================
+
+#[test]
+fn gold_pickup() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_item(ItemKind::Gold, IVec2::new(5, 4));
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert_eq!(game.gold_count(), 1, "gold should be picked up");
+    assert_eq!(game.item_count_at(IVec2::new(5, 4)), 0, "gold should be despawned");
+}
+
+#[test]
+fn weapon_auto_equip() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    let sword = game.spawn_item(ItemKind::IronSword, IVec2::new(5, 4));
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    let (weapon, _, _) = game.player_inventory().unwrap();
+    assert_eq!(weapon, Some(sword), "iron sword should be equipped");
+}
+
+#[test]
+fn weapon_swap_drops_old() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    let sword1 = game.spawn_item(ItemKind::IronSword, IVec2::new(5, 4));
+    let sword2 = game.spawn_item(ItemKind::FireBlade, IVec2::new(5, 3));
+
+    // Pick up first sword
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    let (weapon, _, _) = game.player_inventory().unwrap();
+    assert_eq!(weapon, Some(sword1), "first sword should be equipped");
+
+    // Pick up second sword — first should be dropped
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    let (weapon, _, _) = game.player_inventory().unwrap();
+    assert_eq!(weapon, Some(sword2), "second sword should be equipped");
+    // Old sword should be dropped at player's position
+    assert!(game.entity_pos(sword1).is_some(), "old sword should be back on ground");
+}
+
+#[test]
+fn armor_auto_equip() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    let armor = game.spawn_item(ItemKind::LeatherArmor, IVec2::new(5, 4));
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    let (_, equipped_armor, _) = game.player_inventory().unwrap();
+    assert_eq!(equipped_armor, Some(armor), "armor should be equipped");
+}
+
+#[test]
+fn consumable_pickup() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    let potion = game.spawn_item(ItemKind::HealthPotion, IVec2::new(5, 4));
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    let (_, _, consumables) = game.player_inventory().unwrap();
+    assert_eq!(consumables.len(), 1, "consumable should be in inventory");
+    assert_eq!(consumables[0], potion, "health potion should be the consumable");
+}
+
+#[test]
+fn consumable_full_stays_on_ground() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 9));
+
+    // Fill 4 consumable slots
+    game.spawn_item(ItemKind::HealthPotion, IVec2::new(5, 8));
+    game.spawn_item(ItemKind::HealthPotion, IVec2::new(5, 7));
+    game.spawn_item(ItemKind::HealthPotion, IVec2::new(5, 6));
+    game.spawn_item(ItemKind::HealthPotion, IVec2::new(5, 5));
+
+    // Pick up 4
+    for _ in 0..4 {
+        game.press_key(KeyCode::ArrowUp);
+        game.wait_until_phase(TurnPhase::WaitingForInput);
+    }
+
+    let (_, _, consumables) = game.player_inventory().unwrap();
+    assert_eq!(consumables.len(), 4, "should have 4 consumables");
+
+    // Place a 5th potion at player's next position
+    game.spawn_item(ItemKind::Antidote, IVec2::new(5, 4));
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    let (_, _, consumables) = game.player_inventory().unwrap();
+    assert_eq!(consumables.len(), 4, "should still have 4 consumables");
+    assert_eq!(game.item_count_at(IVec2::new(5, 4)), 1, "5th consumable should stay on ground");
+}
+
+// =========================================================================
+// Consumable use tests
+// =========================================================================
+
+#[test]
+fn health_potion_restores_hp() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_item(ItemKind::HealthPotion, IVec2::new(5, 4));
+
+    // Pick up
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Damage player
+    {
+        let w = game.app_mut().world_mut();
+        let mut q = w.query_filtered::<&mut Health, With<Player>>();
+        for mut h in q.iter_mut(w) {
+            h.0 = 2;
+        }
+    }
+
+    // Use consumable
+    game.press_key(KeyCode::Digit1);
+
+    assert_eq!(game.player_health(), Some(5), "health potion should restore 3 HP");
+    let (_, _, consumables) = game.player_inventory().unwrap();
+    assert_eq!(consumables.len(), 0, "consumable should be removed");
+}
+
+#[test]
+fn antidote_removes_poison() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_item(ItemKind::Antidote, IVec2::new(5, 4));
+
+    // Pick up
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Add Poisoned tag to player
+    {
+        let w = game.app_mut().world_mut();
+        let mut q = w.query_filtered::<&mut Tags, With<Player>>();
+        for mut tags in q.iter_mut(w) {
+            tags.0.insert(Tag::Poisoned);
+        }
+    }
+
+    // Use antidote
+    game.press_key(KeyCode::Digit1);
+
+    let player_pos = game.player_pos().unwrap();
+    let tags = game.tags_at(player_pos);
+    let player_tags = tags.iter().find(|t| t.contains(&Tag::Flesh)).unwrap();
+    assert!(
+        !player_tags.contains(&Tag::Poisoned),
+        "antidote should remove Poisoned"
+    );
+}
+
+#[test]
+fn use_empty_slot_noop() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+
+    // Try to use empty slot — should not crash
+    game.press_key(KeyCode::Digit1);
+    assert_eq!(game.player_health(), Some(5), "health should be unchanged");
+}
+
+// =========================================================================
+// Weapon damage tests
+// =========================================================================
+
+#[test]
+fn iron_sword_adds_damage() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_item(ItemKind::IronSword, IVec2::new(5, 4));
+
+    // Pick up sword
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Spawn enemy adjacent above player's new position (5,4)
+    game.spawn_enemy(IVec2::new(5, 3)); // 2 HP
+
+    // Attack enemy
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // With IronSword (+1), total damage = 2, so 2HP enemy should die
+    assert_eq!(game.enemy_count(), 0, "iron sword should deal 2 damage (1 base + 1 weapon), killing 2HP enemy");
+}
+
+#[test]
+fn unarmed_base_damage() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    let enemy = game.spawn_enemy(IVec2::new(5, 4)); // 2 HP
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert_eq!(
+        game.entity_health(enemy),
+        Some(1),
+        "unarmed should deal 1 base damage"
+    );
+}
+
+#[test]
+fn poison_dagger_poisons_enemy() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_item(ItemKind::PoisonDagger, IVec2::new(5, 4));
+
+    // Pick up
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Spawn a high-HP enemy adjacent above player (5,4) so it survives the hit
+    let enemy = game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(5, 3)),
+        Tags(BTreeSet::from([Tag::Flesh])),
+        DerivedTags::default(),
+        Enemy,
+        Health(5),
+        Blocking,
+    )).id();
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Enemy should now have Poisoned tag
+    let w = game.app_mut().world_mut();
+    let tags = w.get::<Tags>(enemy);
+    assert!(
+        tags.is_some_and(|t| t.0.contains(&Tag::Poisoned)),
+        "poison dagger should add Poisoned to enemy"
+    );
+}
+
+// =========================================================================
+// Armor defense tests
+// =========================================================================
+
+#[test]
+fn armor_reduces_melee_damage() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_item(ItemKind::LeatherArmor, IVec2::new(5, 4));
+
+    // Pick up armor
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Spawn enemy adjacent to player
+    game.spawn_enemy(IVec2::new(5, 2));
+
+    // Trigger enemy turn — enemy attacks
+    game.app_mut()
+        .world_mut()
+        .resource_mut::<NextState<TurnPhase>>()
+        .set(TurnPhase::EnemyTurn);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // With armor defense 1, melee dmg = max(1-1, 0) = 0
+    assert_eq!(
+        game.player_health(),
+        Some(5),
+        "armor should reduce melee damage to 0"
+    );
+}
+
+#[test]
+fn no_armor_full_damage() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_enemy(IVec2::new(5, 6));
+
+    game.app_mut()
+        .world_mut()
+        .resource_mut::<NextState<TurnPhase>>()
+        .set(TurnPhase::EnemyTurn);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert_eq!(
+        game.player_health(),
+        Some(4),
+        "without armor, should take full 1 damage"
+    );
+}
+
+// =========================================================================
+// Systemic equipment tests
+// =========================================================================
+
+#[test]
+fn iron_sword_makes_player_conductive() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_item(ItemKind::IronSword, IVec2::new(5, 4));
+
+    // Pick up sword
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Put a spark adjacent to player at (5,4)
+    game.spawn_spark(IVec2::new(5, 3));
+    game.resolve_only();
+
+    let derived = game.derived_at(IVec2::new(5, 4));
+    // Player at (5,4) should have Metal from sword → Conductive → Electrified
+    let player_derived = derived.iter().find(|d| d.contains(&Tag::Conductive));
+    assert!(
+        player_derived.is_some(),
+        "iron sword should make player conductive via Metal tag"
+    );
+}
+
+// =========================================================================
+// Chest tests
+// =========================================================================
+
+#[test]
+fn chest_opens_on_bump() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    let chest = game.spawn_chest(IVec2::new(5, 4));
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Chest should be despawned
+    assert!(
+        game.entity_pos(chest).is_none(),
+        "chest should be despawned after opening"
+    );
+    // Items should spawn at chest position
+    let items = game.item_count_at(IVec2::new(5, 4));
+    assert!(items >= 1, "opening chest should spawn at least 1 item");
+}
+
+#[test]
+fn chest_is_blocking() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    game.spawn_chest(IVec2::new(5, 4));
+
+    // Bumping chest opens it (consuming the turn) but doesn't move player into chest tile
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    // Player should NOT have moved to the chest position (the bump opens the chest, player stays)
+    assert_eq!(
+        game.player_pos(),
+        Some(IVec2::new(5, 5)),
+        "player should not move into chest tile when opening"
+    );
+}
+
+// =========================================================================
+// Enemy drops tests
+// =========================================================================
+
+#[test]
+fn enemy_drops_loot_on_death() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    // Spawn a 1HP enemy with guaranteed gold drop
+    game.spawn_enemy_with_drops(IVec2::new(5, 4), vec![(ItemKind::Gold, 100)]);
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert_eq!(game.enemy_count(), 0, "enemy should be dead");
+    assert!(game.item_count_at(IVec2::new(5, 4)) >= 1, "enemy should drop gold");
+}
+
+#[test]
+fn enemy_without_drop_table_no_items() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    // Regular enemy without DropTable, 1HP for quick kill
+    let enemy = game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(5, 4)),
+        Tags(BTreeSet::from([Tag::Flesh])),
+        DerivedTags::default(),
+        Enemy,
+        Health(1),
+        Blocking,
+    )).id();
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert!(game.entity_pos(enemy).is_none(), "enemy should be dead");
+    assert_eq!(game.item_count_at(IVec2::new(5, 4)), 0, "no items should drop without DropTable");
+}
+
+// =========================================================================
+// Player starts with inventory
+// =========================================================================
+
+#[test]
+fn player_starts_with_empty_inventory() {
+    let mut game = GameHarness::new();
+    let (weapon, armor, consumables) = game.player_inventory().unwrap();
+    assert!(weapon.is_none(), "player should start with no weapon");
+    assert!(armor.is_none(), "player should start with no armor");
+    assert!(consumables.is_empty(), "player should start with no consumables");
+}

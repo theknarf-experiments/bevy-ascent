@@ -65,10 +65,13 @@ floor(X,Y) :- interior(X,Y), not wall(X,Y).
 1 { metal_crate(X,Y) : floor(X,Y) } 1 :- floor_num(3).
 1 { water(X,Y) : floor(X,Y) } 1 :- floor_num(3).
 
-% All floors: 2 torches, 2 barrels, 2-4 oil
+% All floors: 2 torches, 2 barrels, 2-4 oil, 1-2 chests, 0-2 gold, 0-1 health potion
 2 { torch(X,Y) : floor(X,Y) } 2.
 2 { barrel(X,Y) : floor(X,Y) } 2.
 2 { oil(X,Y) : floor(X,Y) } 4.
+1 { chest(X,Y) : floor(X,Y) } 2.
+0 { gold(X,Y) : floor(X,Y) } 2.
+0 { health_pot(X,Y) : floor(X,Y) } 1.
 
 % --- Integrity constraints ---
 % Entity cell: a cell that has any entity
@@ -91,6 +94,9 @@ entity_cell(X,Y) :- ice_golem(X,Y).
 entity_cell(X,Y) :- shock_eel(X,Y).
 entity_cell(X,Y) :- lightning_rod(X,Y).
 entity_cell(X,Y) :- metal_crate(X,Y).
+entity_cell(X,Y) :- chest(X,Y).
+entity_cell(X,Y) :- gold(X,Y).
+entity_cell(X,Y) :- health_pot(X,Y).
 
 % At most one entity per cell
 entity_count(X,Y,N) :- floor(X,Y), N = #count{
@@ -112,7 +118,10 @@ entity_count(X,Y,N) :- floor(X,Y), N = #count{
     16 : ice_golem(X,Y);
     17 : shock_eel(X,Y);
     18 : lightning_rod(X,Y);
-    19 : metal_crate(X,Y)
+    19 : metal_crate(X,Y);
+    20 : chest(X,Y);
+    21 : gold(X,Y);
+    22 : health_pot(X,Y)
 }.
 :- entity_count(X,Y,N), N > 1.
 
@@ -158,6 +167,9 @@ reachable(X,Y2) :- reachable(X,Y1), floor(X,Y2), Y2 = Y1-1.
 #show shock_eel/2.
 #show lightning_rod/2.
 #show metal_crate/2.
+#show chest/2.
+#show gold/2.
+#show health_pot/2.
 "#;
 
 #[derive(Debug)]
@@ -254,6 +266,9 @@ fn build_grid_from_atoms(atoms: &[String]) -> String {
                     "shock_eel" => 'e',
                     "lightning_rod" => '!',
                     "metal_crate" => 'M',
+                    "chest" => 'C',
+                    "gold" => '$',
+                    "health_pot" => 'H',
                     _ => continue,
                 };
                 // Wall should only overwrite empty cells; entities take priority
@@ -322,11 +337,11 @@ pub fn fallback_floors() -> GeneratedFloors {
             "\
 ############
 #..........#
-#.B..o.....#
+#.B..o..C..#
 #..........#
 #.o.##.T..~#
 #...##...g.#
-#..B...o...#
+#..B...o.$.#
 #.....##.B.#
 #..T..##.p.#
 #.g.......>#
@@ -336,14 +351,14 @@ pub fn fallback_floors() -> GeneratedFloors {
             "\
 ############
 #<.........#
-#..........#
+#.....H....#
 #..T...o.z.#
 #...##.....#
 #...##..X..#
-#.o....m...#
+#.o....m.C.#
 #.....s....#
 #.....B....#
-#..f.......#
+#..f...$...#
 #.........>#
 ############"
                 .to_string(),
@@ -353,11 +368,11 @@ pub fn fallback_floors() -> GeneratedFloors {
 #..........#
 #....o..M..#
 #...##..g..#
-#...##.!...#
+#...##.!.C.#
 #..B...T.~.#
 #.....e....#
 #..T..##...#
-#.i...##...#
+#.i...##.$.#
 #........E.#
 ############"
                 .to_string(),
@@ -472,7 +487,7 @@ mod tests {
                         }
                         entity_positions.insert((x, y));
                     }
-                    'g' | 'T' | 'B' | 'o' | '>' | 'E' | '~' | 'p' | 'f' | 'i' | 's' | 'e' | 'X' | 'M' | 'm' | 'z' | '!' => {
+                    'g' | 'T' | 'B' | 'o' | '>' | 'E' | '~' | 'p' | 'f' | 'i' | 's' | 'e' | 'X' | 'M' | 'm' | 'z' | '!' | 'C' | '$' | 'H' => {
                         entity_positions.insert((x, y));
                     }
                     _ => {}

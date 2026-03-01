@@ -1,5 +1,6 @@
 mod components;
 mod datalog;
+mod items;
 mod level;
 mod level_gen;
 mod render;
@@ -38,6 +39,8 @@ fn main() {
         .init_resource::<VictoryAchieved>()
         .init_resource::<FloorTransition>()
         .init_resource::<SettingsOrigin>()
+        .init_resource::<GoldCount>()
+        .init_resource::<PlayerMoved>()
         // Global: camera persists across all states
         .add_systems(Startup, setup_camera)
         // Main Menu
@@ -68,7 +71,11 @@ fn main() {
         // Turn phases (frozen while menu overlay is active)
         .add_systems(
             Update,
-            player_input
+            (
+                player_input,
+                pickup_items.after(player_input),
+                use_consumable,
+            )
                 .run_if(in_state(TurnPhase::WaitingForInput))
                 .run_if(in_state(MenuOverlay::None)),
         )

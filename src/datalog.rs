@@ -8,12 +8,29 @@ pub fn resolve_environment(
     mut commands: Commands,
     query: Query<(Entity, &Tags, &GridPos)>,
     mut next_phase: ResMut<NextState<TurnPhase>>,
+    player_inventory: Query<(Entity, &Inventory), With<Player>>,
+    item_tags: Query<&Tags, With<Item>>,
+    fire_resist_query: Query<(), With<FireResistBuff>>,
 ) {
     // Gather all (Entity, Tag) pairs
-    let has_tag: Vec<(Entity, Tag)> = query
+    let mut has_tag: Vec<(Entity, Tag)> = query
         .iter()
         .flat_map(|(entity, tags, _)| tags.0.iter().map(move |&tag| (entity, tag)))
         .collect();
+
+    // Inject equipped item tags onto the player entity
+    if let Ok((player_entity, inventory)) = player_inventory.single() {
+        for slot_entity in [inventory.weapon, inventory.armor].iter().flatten() {
+            if let Ok(slot_tags) = item_tags.get(*slot_entity) {
+                for &tag in &slot_tags.0 {
+                    has_tag.push((player_entity, tag));
+                }
+            }
+        }
+        if fire_resist_query.get(player_entity).is_ok() {
+            has_tag.push((player_entity, Tag::FireResist));
+        }
+    }
 
     // Gather all (Entity, x, y) positions
     let position: Vec<(Entity, i32, i32)> = query
@@ -50,6 +67,7 @@ pub fn resolve_environment(
         relation is_conductive(Entity);
         relation is_metal(Entity);
         relation is_explosive(Entity);
+        relation is_fire_resist(Entity);
 
         // Base relations (input-only, used for negation / self-immunity)
         relation is_base_wet(Entity);
@@ -61,6 +79,7 @@ pub fn resolve_environment(
         is_base_on_fire(e) <-- has_tag(e, t) if *t == Tag::OnFire;
         is_base_poisoned(e) <-- has_tag(e, t) if *t == Tag::Poisoned;
         is_base_electrified(e) <-- has_tag(e, t) if *t == Tag::Electrified;
+        is_fire_resist(e) <-- has_tag(e, t) if *t == Tag::FireResist;
 
         // Full wet: includes derived wetness (from melting)
         is_wet(e) <-- is_base_wet(e);
@@ -103,9 +122,9 @@ pub fn resolve_environment(
         // Wet + OnFire → Extinguished
         derived(e, Tag::Extinguished) <-- is_wet(e), is_on_fire(e);
 
-        // Fire damage: Flesh near fire, immune if self is base OnFire
-        derived(e, Tag::FireDamage) <-- is_flesh(e), same_tile(e, other), is_on_fire(other), !is_base_on_fire(e);
-        derived(e, Tag::FireDamage) <-- is_flesh(e), adjacent(e, other), is_on_fire(other), !is_base_on_fire(e);
+        // Fire damage: Flesh near fire, immune if self is base OnFire or has FireResist
+        derived(e, Tag::FireDamage) <-- is_flesh(e), same_tile(e, other), is_on_fire(other), !is_base_on_fire(e), !is_fire_resist(e);
+        derived(e, Tag::FireDamage) <-- is_flesh(e), adjacent(e, other), is_on_fire(other), !is_base_on_fire(e), !is_fire_resist(e);
 
         // Melt damage: flesh that melted takes fire damage
         derived(e, Tag::FireDamage) <-- is_flesh(e), derived(e, t) if *t == Tag::Melted;

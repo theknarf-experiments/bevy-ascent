@@ -5,6 +5,7 @@ use bevy::picking::Pickable;
 use bevy::ui_widgets::Activate;
 
 use crate::components::*;
+use crate::items::item_name;
 use crate::render::{glyph_for, name_for};
 
 // ---- Hovered cell resource ----
@@ -297,6 +298,8 @@ pub fn update_tooltip(
         Option<&Health>,
         Option<&StairsDown>,
         Option<&StairsUp>,
+        Option<&ItemKind>,
+        Option<&Chest>,
     )>,
     window_query: Query<&Window>,
 ) {
@@ -311,12 +314,12 @@ pub fn update_tooltip(
 
     // Collect entities at this cell
     let mut lines: Vec<String> = Vec::new();
-    for (grid_pos, player, enemy, exit, pushable, blocking, tags, health, stairs_down, stairs_up) in entity_query.iter() {
+    for (grid_pos, player, enemy, exit, pushable, blocking, tags, health, stairs_down, stairs_up, item_kind, chest) in entity_query.iter() {
         if grid_pos.0 != cell {
             continue;
         }
-        let name = name_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up);
-        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up);
+        let name = name_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest);
+        let glyph = glyph_for(player, enemy, exit, pushable, blocking, tags, stairs_down, stairs_up, item_kind, chest);
 
         let mut line = format!("{} ({})", name, glyph);
 
@@ -424,7 +427,7 @@ pub fn spawn_stats_panel(mut commands: Commands, floor: Res<CurrentFloor>) {
                 width: Val::Px(170.0),
                 padding: UiRect::all(Val::Px(12.0)),
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(12.0),
+                row_gap: Val::Px(6.0),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
@@ -466,22 +469,167 @@ pub fn spawn_stats_panel(mut commands: Commands, floor: Res<CurrentFloor>) {
                 TextColor(Color::srgb(0.7, 0.7, 0.7)),
                 Pickable::IGNORE,
             ));
+
+            // Gold
+            parent.spawn((
+                StatsGoldText,
+                Text::new("Gold: 0"),
+                TextFont {
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.85, 0.0)),
+                Pickable::IGNORE,
+            ));
+
+            // Equipment header
+            parent.spawn((
+                Text::new("--- Equipment ---"),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.5, 0.5, 0.5)),
+                Pickable::IGNORE,
+            ));
+
+            // Weapon
+            parent.spawn((
+                StatsWeaponText,
+                Text::new("Wpn: (none)"),
+                TextFont {
+                    font_size: 16.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.8, 0.8, 0.9)),
+                Pickable::IGNORE,
+            ));
+
+            // Armor
+            parent.spawn((
+                StatsArmorText,
+                Text::new("Arm: (none)"),
+                TextFont {
+                    font_size: 16.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.8, 0.8, 0.9)),
+                Pickable::IGNORE,
+            ));
+
+            // Consumables header
+            parent.spawn((
+                Text::new("--- Items [1-4] ---"),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.5, 0.5, 0.5)),
+                Pickable::IGNORE,
+            ));
+
+            // Consumables
+            parent.spawn((
+                StatsConsumablesText,
+                Text::new("1: (empty)\n2: (empty)\n3: (empty)\n4: (empty)"),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                Pickable::IGNORE,
+            ));
         });
 }
 
 pub fn update_stats_panel(
-    player_query: Query<&Health, With<Player>>,
+    player_query: Query<(&Health, &Inventory), With<Player>>,
     floor: Res<CurrentFloor>,
-    mut hp_text: Query<&mut Text, (With<StatsHpText>, Without<StatsFloorText>)>,
-    mut floor_text: Query<&mut Text, (With<StatsFloorText>, Without<StatsHpText>)>,
+    gold: Res<GoldCount>,
+    mut hp_text: Query<
+        &mut Text,
+        (With<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+    >,
+    mut floor_text: Query<
+        &mut Text,
+        (With<StatsFloorText>, Without<StatsHpText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+    >,
+    mut gold_text: Query<
+        &mut Text,
+        (With<StatsGoldText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsWeaponText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+    >,
+    mut weapon_text: Query<
+        &mut Text,
+        (With<StatsWeaponText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsArmorText>, Without<StatsConsumablesText>),
+    >,
+    mut armor_text: Query<
+        &mut Text,
+        (With<StatsArmorText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsConsumablesText>),
+    >,
+    mut consumables_text: Query<
+        &mut Text,
+        (With<StatsConsumablesText>, Without<StatsHpText>, Without<StatsFloorText>, Without<StatsGoldText>, Without<StatsWeaponText>, Without<StatsArmorText>),
+    >,
+    item_query: Query<(&ItemKind, Option<&WeaponDamage>, Option<&ArmorDefense>), With<Item>>,
 ) {
-    if let Ok(health) = player_query.single() {
+    if let Ok((health, inventory)) = player_query.single() {
         for mut text in hp_text.iter_mut() {
             **text = format!("HP: {}", health.0);
         }
+
+        // Weapon
+        for mut text in weapon_text.iter_mut() {
+            if let Some(weapon_entity) = inventory.weapon {
+                if let Ok((kind, wpn_dmg, _)) = item_query.get(weapon_entity) {
+                    let dmg_str = wpn_dmg.map(|d| format!(" +{}", d.0)).unwrap_or_default();
+                    **text = format!("Wpn: {}{}", item_name(kind), dmg_str);
+                } else {
+                    **text = "Wpn: (none)".to_string();
+                }
+            } else {
+                **text = "Wpn: (none)".to_string();
+            }
+        }
+
+        // Armor
+        for mut text in armor_text.iter_mut() {
+            if let Some(armor_entity) = inventory.armor {
+                if let Ok((kind, _, arm_def)) = item_query.get(armor_entity) {
+                    let def_str = arm_def.map(|d| format!(" +{}", d.0)).unwrap_or_default();
+                    **text = format!("Arm: {}{}", item_name(kind), def_str);
+                } else {
+                    **text = "Arm: (none)".to_string();
+                }
+            } else {
+                **text = "Arm: (none)".to_string();
+            }
+        }
+
+        // Consumables
+        for mut text in consumables_text.iter_mut() {
+            let mut lines = Vec::new();
+            for i in 0..4 {
+                if i < inventory.consumables.len() {
+                    let entity = inventory.consumables[i];
+                    if let Ok((kind, _, _)) = item_query.get(entity) {
+                        lines.push(format!("{}: {}", i + 1, item_name(kind)));
+                    } else {
+                        lines.push(format!("{}: (empty)", i + 1));
+                    }
+                } else {
+                    lines.push(format!("{}: (empty)", i + 1));
+                }
+            }
+            **text = lines.join("\n");
+        }
     }
+
     for mut text in floor_text.iter_mut() {
         **text = format!("Floor: {}", floor.0);
+    }
+
+    for mut text in gold_text.iter_mut() {
+        **text = format!("Gold: {}", gold.0);
     }
 }
 

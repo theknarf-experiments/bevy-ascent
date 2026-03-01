@@ -28,6 +28,9 @@ pub enum Tag {
     Conductive,
     PoisonBurned,
     Exploding,
+
+    // Buff
+    FireResist,
 }
 
 #[derive(Component, Clone, Debug)]
@@ -56,6 +59,75 @@ pub struct Pushable;
 
 #[derive(Component)]
 pub struct Blocking;
+
+// ---- Item system ----
+
+#[derive(Component)]
+pub struct Item;
+
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ItemKind {
+    IronSword,
+    FireBlade,
+    PoisonDagger,
+    LeatherArmor,
+    IronArmor,
+    HealthPotion,
+    Antidote,
+    FireResistPotion,
+    Gold,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EquipSlot {
+    Weapon,
+    Armor,
+}
+
+#[derive(Component)]
+pub struct Equippable(pub EquipSlot);
+
+#[derive(Component)]
+pub struct Consumable;
+
+#[derive(Component)]
+pub struct WeaponDamage(pub i32);
+
+#[derive(Component)]
+pub struct ArmorDefense(pub i32);
+
+#[derive(Component, Default)]
+pub struct Inventory {
+    pub weapon: Option<Entity>,
+    pub armor: Option<Entity>,
+    pub consumables: Vec<Entity>,
+}
+
+#[derive(Component)]
+pub struct Chest;
+
+#[derive(Component, Clone)]
+pub struct DropTable(pub Vec<(ItemKind, u32)>); // (kind, chance_percent)
+
+#[derive(Component)]
+pub struct FireResistBuff;
+
+#[derive(Resource, Default)]
+pub struct GoldCount(pub u32);
+
+// ---- UI markers ----
+
+#[derive(Component)]
+pub struct StatsWeaponText;
+
+#[derive(Component)]
+pub struct StatsArmorText;
+
+#[derive(Component)]
+pub struct StatsConsumablesText;
+
+#[derive(Component)]
+pub struct StatsGoldText;
 
 #[derive(States, Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 pub enum GameState {
@@ -97,6 +169,9 @@ pub struct StatsFloorText;
 
 #[derive(Resource, Default)]
 pub struct FloorTransition(pub Option<bool>); // Some(true) = going down, Some(false) = going up
+
+#[derive(Resource, Default)]
+pub struct PlayerMoved(pub bool);
 
 #[derive(Component)]
 pub struct FlashTimer(pub Timer);

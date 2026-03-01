@@ -2,13 +2,28 @@ use bevy::prelude::*;
 use std::collections::BTreeSet;
 
 use crate::components::*;
+use crate::items::spawn_item;
 use crate::level_gen::GeneratedFloors;
+
+/// Simple deterministic hash from entity bits + salt for drop rolls.
+fn entity_hash(entity: Entity, salt: u32) -> u32 {
+    let bits = entity.to_bits();
+    let mut h = (bits as u32) ^ ((bits >> 32) as u32);
+    h = h.wrapping_add(salt.wrapping_mul(2654435761));
+    h ^= h >> 16;
+    h = h.wrapping_mul(2246822519);
+    h ^= h >> 13;
+    h
+}
 
 pub fn player_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    mut player_query: Query<&mut GridPos, With<Player>>,
-    blocking_query: Query<(Entity, &GridPos), (With<Blocking>, Without<Player>, Without<Pushable>, Without<Enemy>)>,
+    mut player_query: Query<(&mut GridPos, &Inventory), With<Player>>,
+    blocking_query: Query<
+        (Entity, &GridPos),
+        (With<Blocking>, Without<Player>, Without<Pushable>, Without<Enemy>, Without<Chest>),
+    >,
     mut pushable_query: Query<
         (Entity, &mut GridPos, Option<&Blocking>),
         (With<Pushable>, Without<Player>),
@@ -18,7 +33,13 @@ pub fn player_input(
     stairs_down: Query<&GridPos, (With<StairsDown>, Without<Player>, Without<Pushable>)>,
     stairs_up: Query<&GridPos, (With<StairsUp>, Without<Player>, Without<Pushable>)>,
     mut floor_transition: ResMut<FloorTransition>,
-    mut enemy_combat: Query<(Entity, &GridPos, &mut Health), (With<Enemy>, Without<Player>, Without<Pushable>)>,
+    mut player_moved: ResMut<PlayerMoved>,
+    mut enemy_combat: Query<
+        (Entity, &GridPos, &mut Health, Option<&mut Tags>, Option<&DropTable>),
+        (With<Enemy>, Without<Player>, Without<Pushable>, Without<Chest>, Without<Item>),
+    >,
+    weapon_query: Query<(&WeaponDamage, Option<&Tags>), (With<Item>, Without<Enemy>, Without<Player>)>,
+    chest_query: Query<(Entity, &GridPos), (With<Chest>, Without<Player>, Without<Pushable>, Without<Enemy>, Without<Item>)>,
 ) {
     let dir = if keys.just_pressed(KeyCode::ArrowUp) {
         IVec2::new(0, -1)
@@ -32,20 +53,79 @@ pub fn player_input(
         return;
     };
 
-    let Ok(mut player_pos) = player_query.single_mut() else {
+    let Ok((mut player_pos, inventory)) = player_query.single_mut() else {
         return;
     };
 
     let target = player_pos.0 + dir;
 
     // Check if there's an enemy at the target — melee attack
-    if let Some((enemy_entity, _, mut enemy_hp)) =
-        enemy_combat.iter_mut().find(|(_, gp, _)| gp.0 == target)
+    if let Some((enemy_entity, _, mut enemy_hp, mut enemy_tags, drop_table)) =
+        enemy_combat.iter_mut().find(|(_, gp, _, _, _)| gp.0 == target)
     {
-        enemy_hp.0 -= 1;
+        // Calculate damage: base 1 + weapon bonus
+        let mut total_damage = 1;
+        let mut weapon_tags_to_apply: Vec<Tag> = Vec::new();
+
+        if let Some(weapon_entity) = inventory.weapon {
+            if let Ok((wpn_dmg, wpn_tags)) = weapon_query.get(weapon_entity) {
+                total_damage += wpn_dmg.0;
+                if let Some(tags) = wpn_tags {
+                    if tags.0.contains(&Tag::Poisoned) {
+                        weapon_tags_to_apply.push(Tag::Poisoned);
+                    }
+                    if tags.0.contains(&Tag::OnFire) {
+                        weapon_tags_to_apply.push(Tag::OnFire);
+                    }
+                }
+            }
+        }
+
+        enemy_hp.0 -= total_damage;
+
+        // Apply on-hit effects
+        if let Some(ref mut enemy_tags) = enemy_tags {
+            for tag in &weapon_tags_to_apply {
+                enemy_tags.0.insert(*tag);
+            }
+        }
+
         if enemy_hp.0 <= 0 {
+            // Enemy drops
+            let drop_pos = target;
+            if let Some(dt) = drop_table {
+                let dt_clone = dt.0.clone();
+                for (i, (kind, chance)) in dt_clone.iter().enumerate() {
+                    let roll = entity_hash(enemy_entity, i as u32) % 100;
+                    if roll < *chance {
+                        spawn_item(&mut commands, *kind, drop_pos);
+                    }
+                }
+            }
             commands.entity(enemy_entity).despawn();
         }
+        next_phase.set(TurnPhase::EnemyTurn);
+        return;
+    }
+
+    // Check if there's a chest at the target — open it
+    if let Some((chest_entity, _)) = chest_query.iter().find(|(_, gp)| gp.0 == target) {
+        // Open chest: despawn and spawn items
+        let chest_pos = target;
+        let loot_count = 1 + (entity_hash(chest_entity, 0) % 2) as usize; // 1-2 items
+        let item_pool = [
+            ItemKind::HealthPotion,
+            ItemKind::Antidote,
+            ItemKind::FireResistPotion,
+            ItemKind::IronSword,
+            ItemKind::LeatherArmor,
+            ItemKind::Gold,
+        ];
+        for i in 0..loot_count {
+            let idx = entity_hash(chest_entity, (i + 1) as u32) as usize % item_pool.len();
+            spawn_item(&mut commands, item_pool[idx], chest_pos);
+        }
+        commands.entity(chest_entity).despawn();
         next_phase.set(TurnPhase::EnemyTurn);
         return;
     }
@@ -60,13 +140,14 @@ pub fn player_input(
         let push_dest = target + dir;
         // Check push destination is free of all blocking (walls + other pushable-blocking + enemies)
         let dest_blocked_wall = blocking_query.iter().any(|(_, gp)| gp.0 == push_dest);
-        let dest_blocked_enemy = enemy_combat.iter().any(|(_, gp, _)| gp.0 == push_dest);
+        let dest_blocked_enemy = enemy_combat.iter().any(|(_, gp, _, _, _)| gp.0 == push_dest);
         let dest_blocked_pushable = pushable_query
             .iter()
             .any(|(e, pos, _)| e != push_entity && pos.0 == push_dest);
         let dest_occupied = all_pos_query.iter().any(|gp| gp.0 == push_dest);
+        let dest_blocked_chest = chest_query.iter().any(|(_, gp)| gp.0 == push_dest);
 
-        if !dest_blocked_wall && !dest_blocked_enemy && !dest_blocked_pushable && !dest_occupied {
+        if !dest_blocked_wall && !dest_blocked_enemy && !dest_blocked_pushable && !dest_occupied && !dest_blocked_chest {
             if let Ok((_, mut push_pos, _)) = pushable_query.get_mut(push_entity) {
                 push_pos.0 = push_dest;
             }
@@ -86,7 +167,7 @@ pub fn player_input(
             }
         }
     } else {
-        // No pushable at target — check if blocked by wall
+        // No pushable at target — check if blocked by wall or chest
         let blocked_wall = blocking_query.iter().find(|(_, gp)| gp.0 == target);
         let blocked_pushable = pushable_query
             .iter()
@@ -105,7 +186,10 @@ pub fn player_input(
         }
     }
 
-    // Player moved to target — check for stairs
+    // Player moved to target — flag for pickup system
+    player_moved.0 = true;
+
+    // Check for stairs
     let on_stairs_down = stairs_down.iter().any(|gp| gp.0 == target);
     let on_stairs_up = stairs_up.iter().any(|gp| gp.0 == target);
 
@@ -137,18 +221,147 @@ pub fn tick_flash_timers(
     }
 }
 
+pub fn pickup_items(
+    mut commands: Commands,
+    mut player_query: Query<(&GridPos, &mut Inventory), With<Player>>,
+    item_query: Query<(Entity, &GridPos, &ItemKind, Option<&Equippable>, Option<&Consumable>), (With<Item>, Without<Player>)>,
+    mut gold_count: ResMut<GoldCount>,
+    mut player_moved: ResMut<PlayerMoved>,
+) {
+    if !player_moved.0 {
+        return;
+    }
+    player_moved.0 = false;
+
+    let Ok((player_pos, mut inventory)) = player_query.single_mut() else {
+        return;
+    };
+
+    let items_here: Vec<_> = item_query
+        .iter()
+        .filter(|(_, gp, _, _, _)| gp.0 == player_pos.0)
+        .map(|(e, _, kind, equip, consumable)| (e, *kind, equip.map(|eq| eq.0), consumable.is_some()))
+        .collect();
+
+    for (entity, kind, equip_slot, is_consumable) in items_here {
+        if kind == ItemKind::Gold {
+            gold_count.0 += 1;
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        if let Some(slot) = equip_slot {
+            match slot {
+                EquipSlot::Weapon => {
+                    if let Some(old_weapon) = inventory.weapon.take() {
+                        // Drop old weapon at player position
+                        commands.entity(old_weapon).insert((
+                            GridPos(player_pos.0),
+                            FloorEntity,
+                        ));
+                    }
+                    inventory.weapon = Some(entity);
+                    commands.entity(entity).remove::<GridPos>();
+                    commands.entity(entity).remove::<FloorEntity>();
+                }
+                EquipSlot::Armor => {
+                    if let Some(old_armor) = inventory.armor.take() {
+                        commands.entity(old_armor).insert((
+                            GridPos(player_pos.0),
+                            FloorEntity,
+                        ));
+                    }
+                    inventory.armor = Some(entity);
+                    commands.entity(entity).remove::<GridPos>();
+                    commands.entity(entity).remove::<FloorEntity>();
+                }
+            }
+            continue;
+        }
+
+        if is_consumable {
+            if inventory.consumables.len() < 4 {
+                inventory.consumables.push(entity);
+                commands.entity(entity).remove::<GridPos>();
+                commands.entity(entity).remove::<FloorEntity>();
+            }
+            // If full, item stays on ground
+            continue;
+        }
+    }
+}
+
+pub fn use_consumable(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    mut player_query: Query<(Entity, &mut Inventory, &mut Health, &mut Tags), (With<Player>, Without<Item>)>,
+    item_kind_query: Query<&ItemKind, (With<Item>, Without<Player>)>,
+) {
+    let slot = if keys.just_pressed(KeyCode::Digit1) {
+        Some(0)
+    } else if keys.just_pressed(KeyCode::Digit2) {
+        Some(1)
+    } else if keys.just_pressed(KeyCode::Digit3) {
+        Some(2)
+    } else if keys.just_pressed(KeyCode::Digit4) {
+        Some(3)
+    } else {
+        None
+    };
+
+    let Some(slot_idx) = slot else {
+        return;
+    };
+
+    let Ok((player_entity, mut inventory, mut health, mut tags)) = player_query.single_mut() else {
+        return;
+    };
+
+    if slot_idx >= inventory.consumables.len() {
+        return;
+    }
+
+    let item_entity = inventory.consumables[slot_idx];
+    let Ok(kind) = item_kind_query.get(item_entity) else {
+        return;
+    };
+
+    match kind {
+        ItemKind::HealthPotion => {
+            health.0 = (health.0 + 3).min(10);
+        }
+        ItemKind::Antidote => {
+            tags.0.remove(&Tag::Poisoned);
+        }
+        ItemKind::FireResistPotion => {
+            commands.entity(player_entity).insert(FireResistBuff);
+        }
+        _ => return,
+    }
+
+    inventory.consumables.remove(slot_idx);
+    commands.entity(item_entity).despawn();
+}
+
 pub fn enemy_turn(
-    player_query: Query<&GridPos, (With<Player>, Without<Enemy>)>,
-    mut enemy_query: Query<(Entity, &mut GridPos, &mut Health), With<Enemy>>,
+    player_query: Query<(&GridPos, &Inventory), (With<Player>, Without<Enemy>)>,
+    mut enemy_query: Query<(Entity, &mut GridPos, &mut Health), (With<Enemy>, Without<Player>)>,
     mut player_health: Query<&mut Health, (With<Player>, Without<Enemy>)>,
     blocking_query: Query<(Entity, &GridPos), (With<Blocking>, Without<Enemy>, Without<Player>)>,
     mut next_phase: ResMut<NextState<TurnPhase>>,
+    armor_query: Query<&ArmorDefense, (With<Item>, Without<Player>, Without<Enemy>)>,
 ) {
-    let Ok(player_pos) = player_query.single() else {
+    let Ok((player_pos, inventory)) = player_query.single() else {
         next_phase.set(TurnPhase::ResolveEnvironment);
         return;
     };
     let player_tile = player_pos.0;
+
+    // Get player armor defense
+    let armor_def = inventory.armor
+        .and_then(|e| armor_query.get(e).ok())
+        .map(|a| a.0)
+        .unwrap_or(0);
 
     // Collect all blocking positions (non-enemy)
     let static_blocking: Vec<IVec2> = blocking_query.iter().map(|(_, pos)| pos.0).collect();
@@ -169,7 +382,8 @@ pub fn enemy_turn(
         // If adjacent to player, attack
         if diff.x.abs() + diff.y.abs() == 1 {
             if let Ok(mut ph) = player_health.single_mut() {
-                ph.0 -= 1;
+                let dmg = (1 - armor_def).max(0);
+                ph.0 -= dmg;
             }
             continue;
         }
@@ -220,10 +434,13 @@ pub fn enemy_turn(
 
 pub fn apply_consequences(
     mut commands: Commands,
-    mut health_query: Query<(Entity, &mut Health, &DerivedTags)>,
+    mut health_query: Query<(Entity, &mut Health, &DerivedTags, Option<&DropTable>, Option<&GridPos>)>,
     mut tags_query: Query<(Entity, &mut Tags, &DerivedTags, &GridPos)>,
     ice_query: Query<(Entity, &DerivedTags, &GridPos), With<Blocking>>,
     mut next_phase: ResMut<NextState<TurnPhase>>,
+    player_inventory: Query<&Inventory, With<Player>>,
+    armor_query: Query<&ArmorDefense, With<Item>>,
+    player_query: Query<Entity, With<Player>>,
 ) {
     // 1. Explosions first: collect explosion centers, then apply OnFire
     let exploding: Vec<(Entity, IVec2)> = tags_query
@@ -273,8 +490,16 @@ pub fn apply_consequences(
         ));
     }
 
+    // Get player's armor defense for damage reduction
+    let player_entity = player_query.single().ok();
+    let armor_def = player_inventory.single().ok()
+        .and_then(|inv| inv.armor)
+        .and_then(|e| armor_query.get(e).ok())
+        .map(|a| a.0)
+        .unwrap_or(0);
+
     // 3. All damage types → decrement Health (stacking)
-    for (entity, mut health, derived) in health_query.iter_mut() {
+    for (entity, mut health, derived, drop_table, grid_pos) in health_query.iter_mut() {
         let mut dmg = 0;
         if derived.0.contains(&Tag::FireDamage) {
             dmg += 1;
@@ -286,8 +511,24 @@ pub fn apply_consequences(
             dmg += 1;
         }
         if dmg > 0 {
+            // Apply armor defense if this is the player
+            let is_player = player_entity.is_some_and(|pe| pe == entity);
+            if is_player {
+                dmg = (dmg - armor_def).max(0);
+            }
             health.0 -= dmg;
             if health.0 <= 0 {
+                // Drop loot if entity has a drop table
+                if let (Some(dt), Some(pos)) = (drop_table, grid_pos) {
+                    let drop_pos = pos.0;
+                    let dt_clone = dt.0.clone();
+                    for (i, (kind, chance)) in dt_clone.iter().enumerate() {
+                        let roll = entity_hash(entity, i as u32) % 100;
+                        if roll < *chance {
+                            spawn_item(&mut commands, *kind, drop_pos);
+                        }
+                    }
+                }
                 commands.entity(entity).despawn();
             }
         }
@@ -328,7 +569,7 @@ pub fn handle_floor_transition(
     mut commands: Commands,
     mut transition: ResMut<FloorTransition>,
     floor_entities: Query<Entity, With<FloorEntity>>,
-    mut player_query: Query<&mut GridPos, With<Player>>,
+    mut player_query: Query<(Entity, &mut GridPos), With<Player>>,
     mut current_floor: ResMut<CurrentFloor>,
     generated: Res<GeneratedFloors>,
 ) {
@@ -350,8 +591,9 @@ pub fn handle_floor_transition(
     // Spawn new floor
     let result = crate::level::spawn_floor(&mut commands, &generated.floors[(new_floor - 1) as usize]);
 
-    // Reposition player: going down → appear at stairs up; going up → appear at stairs down
-    if let Ok(mut player_pos) = player_query.single_mut() {
+    // Remove FireResistBuff on floor transition, reposition player
+    if let Ok((player_entity, mut player_pos)) = player_query.single_mut() {
+        commands.entity(player_entity).remove::<FireResistBuff>();
         if going_down {
             if let Some(pos) = result.stairs_up_pos {
                 player_pos.0 = pos;
@@ -369,9 +611,11 @@ pub fn handle_floor_transition(
 pub fn reset_game_resources(
     mut victory: ResMut<VictoryAchieved>,
     mut floor: ResMut<CurrentFloor>,
+    mut gold: ResMut<GoldCount>,
 ) {
     victory.0 = false;
     floor.0 = 0;
+    gold.0 = 0;
 }
 
 pub fn check_loss(

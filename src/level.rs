@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use std::collections::BTreeSet;
 
 use crate::components::*;
+use crate::items::spawn_item;
 use crate::level_gen::GeneratedFloors;
 
 pub struct FloorSpawnResult {
@@ -43,6 +44,10 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Blocking,
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
+                        DropTable(vec![
+                            (ItemKind::Gold, 50),
+                            (ItemKind::HealthPotion, 25),
+                        ]),
                     ));
                 }
                 'T' => {
@@ -123,6 +128,10 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Blocking,
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
+                        DropTable(vec![
+                            (ItemKind::Gold, 50),
+                            (ItemKind::FireBlade, 25),
+                        ]),
                     ));
                 }
                 'i' => {
@@ -136,6 +145,10 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Blocking,
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
+                        DropTable(vec![
+                            (ItemKind::Gold, 100),
+                            (ItemKind::IronArmor, 50),
+                        ]),
                     ));
                 }
                 's' => {
@@ -149,6 +162,11 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Blocking,
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
+                        DropTable(vec![
+                            (ItemKind::Gold, 50),
+                            (ItemKind::Antidote, 25),
+                            (ItemKind::PoisonDagger, 25),
+                        ]),
                     ));
                 }
                 'e' => {
@@ -161,6 +179,10 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         Health(2),
                         FloorEntity,
                         DespawnOnExit(GameState::Playing),
+                        DropTable(vec![
+                            (ItemKind::Gold, 50),
+                            (ItemKind::IronSword, 25),
+                        ]),
                     ));
                 }
                 'p' => {
@@ -238,6 +260,24 @@ pub fn spawn_floor(commands: &mut Commands, layout: &str) -> FloorSpawnResult {
                         DespawnOnExit(GameState::Playing),
                     ));
                 }
+                'C' => {
+                    // Chest
+                    commands.spawn((
+                        GridPos(pos),
+                        Tags(BTreeSet::from([Tag::Wood])),
+                        DerivedTags::default(),
+                        Chest,
+                        Blocking,
+                        FloorEntity,
+                        DespawnOnExit(GameState::Playing),
+                    ));
+                }
+                '$' => {
+                    spawn_item(commands, ItemKind::Gold, pos);
+                }
+                'H' => {
+                    spawn_item(commands, ItemKind::HealthPotion, pos);
+                }
                 _ => {} // '.' or anything else = empty floor
             }
         }
@@ -260,6 +300,7 @@ pub fn spawn_initial_floor(
         DerivedTags::default(),
         Player,
         Health(5),
+        Inventory::default(),
         DespawnOnExit(GameState::Playing),
     ));
 }
