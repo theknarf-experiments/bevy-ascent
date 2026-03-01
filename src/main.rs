@@ -61,6 +61,7 @@ fn main() {
                 generate_levels,
                 (
                     spawn_initial_floor,
+                    spawn_tile_backgrounds,
                     spawn_tooltip,
                     spawn_floor_indicator,
                     spawn_stats_panel,
@@ -88,7 +89,10 @@ fn main() {
         )
         .add_systems(
             Update,
-            sync_colors
+            (
+                sync_colors,
+                sync_tile_backgrounds.after(sync_colors),
+            )
                 .after(update_fog_of_war)
                 .run_if(in_state(GameState::Playing)),
         )

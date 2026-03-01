@@ -328,7 +328,7 @@ impl GameHarness {
             .world_mut()
             .spawn((
                 GridPos(pos),
-                Tags(BTreeSet::from([Tag::Wood, Tag::OnFire])),
+                Tags(BTreeSet::from([Tag::Wood, Tag::FireSource])),
                 DerivedTags::default(),
                 Pushable,
             ))

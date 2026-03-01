@@ -93,7 +93,10 @@ pub fn glyph_for(
             return "m"; // Poison Mushroom
         }
         if tags.0.contains(&Tag::Wood) {
-            if tags.0.contains(&Tag::OnFire) && pushable.is_some() && blocking.is_none() {
+            if (tags.0.contains(&Tag::OnFire) || tags.0.contains(&Tag::FireSource))
+                && pushable.is_some()
+                && blocking.is_none()
+            {
                 return "T";
             }
             if blocking.is_some() {
@@ -192,7 +195,10 @@ pub fn name_for(
             return "Poison Mushroom";
         }
         if tags.0.contains(&Tag::Wood) {
-            if tags.0.contains(&Tag::OnFire) && pushable.is_some() && blocking.is_none() {
+            if (tags.0.contains(&Tag::OnFire) || tags.0.contains(&Tag::FireSource))
+                && pushable.is_some()
+                && blocking.is_none()
+            {
                 return "Torch";
             }
             if blocking.is_some() {
@@ -254,7 +260,7 @@ fn color_for(
     }
 
     if let Some(tags) = tags {
-        if tags.0.contains(&Tag::OnFire) {
+        if tags.0.contains(&Tag::OnFire) || tags.0.contains(&Tag::FireSource) {
             return Color::srgb(1.0, 0.6, 0.0); // orange
         }
         if tags.0.contains(&Tag::Electrified) {
@@ -365,7 +371,7 @@ pub fn spawn_sprites(
             Option<&Chest>,
             Option<&Boss>,
         ),
-        Without<HasSprite>,
+        (Without<HasSprite>, Without<TileBackground>),
     >,
     fog_map: Res<FogMap>,
 ) {
@@ -466,31 +472,36 @@ pub fn sync_transforms(mut query: Query<(&GridPos, &mut Transform), Changed<Grid
 }
 
 pub fn sync_colors(
-    mut query: Query<(
-        &mut TextColor,
-        &mut Text2d,
-        Option<&Tags>,
-        Option<&DerivedTags>,
-        Option<&Player>,
-        Option<&Enemy>,
-        Option<&Exit>,
-        Option<&Pushable>,
-        Option<&Blocking>,
-        Option<&FlashTimer>,
+    mut query: Query<
         (
-            Option<&StairsDown>,
-            Option<&StairsUp>,
-            Option<&ItemKind>,
-            Option<&Chest>,
-            Option<&Boss>,
-            Option<&GridPos>,
+            &mut TextColor,
+            &mut Text2d,
+            &mut Sprite,
+            Option<&Tags>,
+            Option<&DerivedTags>,
+            Option<&Player>,
+            Option<&Enemy>,
+            Option<&Exit>,
+            Option<&Pushable>,
+            Option<&Blocking>,
+            Option<&FlashTimer>,
+            (
+                Option<&StairsDown>,
+                Option<&StairsUp>,
+                Option<&ItemKind>,
+                Option<&Chest>,
+                Option<&Boss>,
+                Option<&GridPos>,
+            ),
         ),
-    )>,
+        Without<TileBackground>,
+    >,
     fog_map: Res<FogMap>,
 ) {
     for (
         mut text_color,
         mut text,
+        mut sprite,
         tags,
         derived,
         player,
@@ -542,5 +553,138 @@ pub fn sync_colors(
             boss,
         );
         **text = glyph.to_string();
+
+        // Set sprite background color based on environmental tags on this entity
+        let bg = tile_bg_color(tags, derived);
+        if player.is_none() {
+            if let Some(gp) = grid_pos {
+                let vis = fog_map.get(gp.0.x, gp.0.y);
+                sprite.color = match vis {
+                    TileVisibility::Visible => bg,
+                    TileVisibility::Explored => {
+                        let Srgba { red, green, blue, alpha } = bg.to_srgba();
+                        Color::srgba(red * 0.5, green * 0.5, blue * 0.5, alpha * 0.3)
+                    }
+                    TileVisibility::Unexplored => Color::srgba(0.0, 0.0, 0.0, 0.0),
+                };
+            }
+        } else {
+            sprite.color = Color::srgba(0.0, 0.0, 0.0, 0.01);
+        }
     }
 }
+
+/// Determine the background tint for a tile based on environmental tags.
+/// Returns transparent if no environmental effect is present.
+fn tile_bg_color(tags: Option<&Tags>, derived: Option<&DerivedTags>) -> Color {
+    let has = |tag: Tag| -> bool {
+        tags.is_some_and(|t| t.0.contains(&tag))
+            || derived.is_some_and(|d| d.0.contains(&tag))
+    };
+    // Priority: poison > fire > electric > wet
+    if has(Tag::Poisoned) {
+        Color::srgba(0.0, 0.6, 0.0, 0.55)
+    } else if has(Tag::OnFire) || has(Tag::FireSource) {
+        Color::srgba(0.7, 0.3, 0.0, 0.55)
+    } else if has(Tag::Electrified) {
+        Color::srgba(0.2, 0.5, 1.0, 0.5)
+    } else if has(Tag::Wet) {
+        Color::srgba(0.0, 0.3, 0.8, 0.45)
+    } else {
+        Color::srgba(0.0, 0.0, 0.0, 0.01)
+    }
+}
+
+pub fn spawn_tile_backgrounds(mut commands: Commands) {
+    for y in 0..12 {
+        for x in 0..12 {
+            let px = x as f32 * CELL_SIZE;
+            let py = -(y as f32) * CELL_SIZE;
+            commands.spawn((
+                GridPos(IVec2::new(x, y)),
+                TileBackground,
+                DespawnOnExit(GameState::Playing),
+                Text2d::new(" "),
+                TextFont {
+                    font_size: 32.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
+                Sprite {
+                    color: Color::srgba(0.0, 0.0, 0.0, 0.0),
+                    custom_size: Some(Vec2::new(CELL_SIZE, CELL_SIZE)),
+                    ..default()
+                },
+                Transform::from_xyz(px, py, -1.0),
+                HasSprite,
+            ));
+        }
+    }
+}
+
+pub fn sync_tile_backgrounds(
+    entity_query: Query<
+        (&GridPos, Option<&Tags>, Option<&DerivedTags>),
+        Without<TileBackground>,
+    >,
+    mut bg_query: Query<(&GridPos, &mut Sprite), With<TileBackground>>,
+    fog_map: Res<FogMap>,
+) {
+    use std::collections::HashMap;
+
+    let mut tile_colors: HashMap<IVec2, (u8, Color)> = HashMap::new();
+
+    let env_tags = [
+        Tag::Poisoned,
+        Tag::OnFire,
+        Tag::FireSource,
+        Tag::Electrified,
+        Tag::Wet,
+    ];
+
+    for (gp, tags, derived) in entity_query.iter() {
+        let pos = gp.0;
+        for &tag in &env_tags {
+            let present = tags.is_some_and(|t| t.0.contains(&tag))
+                || derived.is_some_and(|d| d.0.contains(&tag));
+            if !present {
+                continue;
+            }
+            if let Some((priority, color)) = match tag {
+                Tag::Poisoned => Some((0u8, Color::srgba(0.0, 0.6, 0.0, 0.55))),
+                Tag::OnFire | Tag::FireSource => Some((1, Color::srgba(0.7, 0.3, 0.0, 0.55))),
+                Tag::Electrified => Some((2, Color::srgba(0.2, 0.5, 1.0, 0.5))),
+                Tag::Wet => Some((3, Color::srgba(0.0, 0.3, 0.8, 0.45))),
+                _ => None,
+            } {
+                tile_colors
+                    .entry(pos)
+                    .and_modify(|(ep, ec)| {
+                        if priority < *ep {
+                            *ep = priority;
+                            *ec = color;
+                        }
+                    })
+                    .or_insert((priority, color));
+            }
+        }
+    }
+
+    for (gp, mut sprite) in bg_query.iter_mut() {
+        let base_color = tile_colors
+            .get(&gp.0)
+            .map(|&(_, c)| c)
+            .unwrap_or(Color::srgba(0.0, 0.0, 0.0, 0.0));
+
+        let vis = fog_map.get(gp.0.x, gp.0.y);
+        sprite.color = match vis {
+            TileVisibility::Visible => base_color,
+            TileVisibility::Explored => {
+                let Srgba { red, green, blue, alpha } = base_color.to_srgba();
+                Color::srgba(red * 0.5, green * 0.5, blue * 0.5, alpha * 0.3)
+            }
+            TileVisibility::Unexplored => Color::srgba(0.0, 0.0, 0.0, 0.0),
+        };
+    }
+}
+

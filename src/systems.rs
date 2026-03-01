@@ -231,6 +231,7 @@ pub fn apply_consequences(
     for (_, mut tags, derived, _, _) in tags_query.iter_mut() {
         if derived.0.contains(&Tag::Extinguished) {
             tags.0.remove(&Tag::OnFire);
+            tags.0.remove(&Tag::FireSource);
         }
         if derived.0.contains(&Tag::PoisonBurned) {
             tags.0.remove(&Tag::Poisoned);

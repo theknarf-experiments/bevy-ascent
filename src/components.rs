@@ -13,6 +13,7 @@ pub enum Tag {
 
     // States (base or derived)
     OnFire,
+    FireSource, // contained fire (torch) — ignites materials but doesn't harm flesh
     Wet,
     Poisoned,
     Electrified,
@@ -231,6 +232,9 @@ pub struct VictoryAchieved(pub bool);
 
 #[derive(Component)]
 pub struct FloorEntity;
+
+#[derive(Component)]
+pub struct TileBackground;
 
 #[derive(Component)]
 pub struct StairsDown;

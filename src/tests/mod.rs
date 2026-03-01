@@ -208,18 +208,68 @@ fn ice_melts_adjacent_to_fire() {
 }
 
 #[test]
-fn flesh_adjacent_to_fire_takes_damage() {
+fn flesh_adjacent_to_fire_source_no_damage() {
     let mut game = GameHarness::custom();
-    game.spawn_torch(IVec2::new(0, 0));
+    game.spawn_torch(IVec2::new(0, 0)); // FireSource, not OnFire
     game.app_mut().world_mut().spawn((
         GridPos(IVec2::new(1, 0)),
         Tags(BTreeSet::from([Tag::Flesh])),
         DerivedTags::default(),
+        Health(5),
     ));
     game.resolve();
+    let derived = &game.derived_at(IVec2::new(1, 0))[0];
     assert!(
-        game.derived_at(IVec2::new(1, 0))[0].contains(&Tag::FireDamage),
-        "flesh adjacent to fire should take damage"
+        !derived.contains(&Tag::FireDamage),
+        "flesh adjacent to fire source (torch) should NOT take damage"
+    );
+}
+
+#[test]
+fn flesh_on_fire_source_no_damage() {
+    let mut game = GameHarness::custom();
+    // Flesh on same tile as a torch (FireSource)
+    game.spawn_torch(IVec2::new(0, 0));
+    game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(0, 0)),
+        Tags(BTreeSet::from([Tag::Flesh])),
+        DerivedTags::default(),
+        Health(5),
+    ));
+    game.resolve();
+    let derived_list = game.derived_at(IVec2::new(0, 0));
+    let has_fire_damage = derived_list
+        .iter()
+        .any(|dt| dt.contains(&Tag::FireDamage));
+    assert!(
+        !has_fire_damage,
+        "flesh on same tile as fire source (torch) should NOT take damage"
+    );
+}
+
+#[test]
+fn flesh_catches_fire_from_same_tile_on_fire() {
+    let mut game = GameHarness::custom();
+    // Burning oil on same tile as flesh
+    game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(0, 0)),
+        Tags(BTreeSet::from([Tag::Oil, Tag::OnFire])),
+        DerivedTags::default(),
+    ));
+    game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(0, 0)),
+        Tags(BTreeSet::from([Tag::Flesh])),
+        DerivedTags::default(),
+        Health(5),
+    ));
+    game.resolve_only();
+    let derived_list = game.derived_at(IVec2::new(0, 0));
+    let flesh_derived = derived_list
+        .iter()
+        .find(|dt| dt.contains(&Tag::OnFire) && dt.contains(&Tag::FireDamage));
+    assert!(
+        flesh_derived.is_some(),
+        "flesh on same tile as burning oil should catch fire and take fire damage"
     );
 }
 
@@ -549,6 +599,29 @@ fn player_cannot_push_barrel_into_wall() {
     );
 }
 
+#[test]
+fn push_burning_barrel_damages_player() {
+    let mut game = GameHarness::custom();
+    game.spawn_player(IVec2::new(5, 5));
+    // Spawn a barrel that is on fire
+    game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(5, 4)),
+        Tags(BTreeSet::from([Tag::Wood, Tag::OnFire])),
+        DerivedTags::default(),
+        Pushable,
+        Blocking,
+    ));
+
+    game.press_key(KeyCode::ArrowUp);
+    game.wait_until_phase(TurnPhase::WaitingForInput);
+
+    assert_eq!(
+        game.player_health(),
+        Some(4),
+        "pushing a burning barrel should deal 1 damage"
+    );
+}
+
 // =========================================================================
 // Integration: turn cycle
 // =========================================================================
@@ -598,16 +671,17 @@ fn player_can_move_twice() {
 #[test]
 fn fire_chain_damages_enemy() {
     let mut game = GameHarness::custom();
-    game.spawn_torch(IVec2::new(0, 0));
-    game.spawn_oil(IVec2::new(1, 0));
-    let enemy = game.spawn_enemy(IVec2::new(2, 0));
+    game.spawn_torch(IVec2::new(0, 0)); // FireSource ignites adjacent oil
+    game.spawn_oil(IVec2::new(1, 0)); // Oil catches fire
+    // Enemy on same tile as oil — flesh catches fire from same-tile OnFire
+    let enemy = game.spawn_enemy(IVec2::new(1, 0));
 
     game.resolve();
 
     assert_eq!(
         game.entity_health(enemy),
         Some(1),
-        "enemy should take 1 damage from adjacent fire chain"
+        "enemy should take 1 damage from same-tile burning oil"
     );
 }
 
@@ -760,9 +834,13 @@ fn poison_does_not_spread_through_fire() {
 #[test]
 fn poison_and_fire_stack_damage() {
     let mut game = GameHarness::custom();
-    // Poison source and fire source near a flesh entity
+    // Poison source adjacent, burning oil on same tile as enemy
     game.spawn_poison(IVec2::new(0, 0));
-    game.spawn_torch(IVec2::new(2, 0));
+    game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(1, 0)),
+        Tags(BTreeSet::from([Tag::Oil, Tag::OnFire])),
+        DerivedTags::default(),
+    ));
     let enemy = game
         .app_mut()
         .world_mut()
@@ -865,10 +943,14 @@ fn fire_melts_ice_water_conducts_electricity() {
 #[test]
 fn all_three_elements_triple_damage() {
     let mut game = GameHarness::custom();
-    // Fire, poison, and electricity sources around a flesh entity
-    game.spawn_torch(IVec2::new(1, 0)); // fire source
-    game.spawn_poison(IVec2::new(0, 1)); // poison source
-    game.spawn_spark(IVec2::new(1, 2)); // electricity source
+    // Burning oil on same tile as enemy for fire damage
+    game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(1, 1)),
+        Tags(BTreeSet::from([Tag::Oil, Tag::OnFire])),
+        DerivedTags::default(),
+    ));
+    game.spawn_poison(IVec2::new(0, 1)); // poison source (adjacent)
+    game.spawn_spark(IVec2::new(1, 2)); // electricity source (adjacent)
     let enemy = game
         .app_mut()
         .world_mut()
@@ -897,7 +979,12 @@ fn all_three_elements_triple_damage() {
 fn fire_imp_immune_to_fire() {
     let mut game = GameHarness::custom();
     let imp = game.spawn_fire_imp(IVec2::new(0, 0));
-    game.spawn_torch(IVec2::new(1, 0)); // adjacent fire
+    // Burning oil on same tile — fire imp has base OnFire so it's immune
+    game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(0, 0)),
+        Tags(BTreeSet::from([Tag::Oil, Tag::OnFire])),
+        DerivedTags::default(),
+    ));
     game.resolve();
     assert_eq!(
         game.entity_health(imp),
@@ -1700,11 +1787,11 @@ fn dragon_melee_attacks_adjacent_player() {
         .set(TurnPhase::EnemyResolve);
     game.wait_until_phase(TurnPhase::WaitingForInput);
 
-    // Dragon deals 2 melee damage + 1 fire damage (OnFire tag) via environment resolve
+    // Dragon deals 2 melee damage (fire from adjacency no longer hurts flesh)
     assert_eq!(
         game.player_health(),
-        Some(2),
-        "dragon should deal 2 melee + 1 fire damage"
+        Some(3),
+        "dragon should deal 2 melee damage"
     );
 }
 
@@ -1758,7 +1845,12 @@ fn dragon_does_not_move() {
 fn dragon_is_immune_to_fire() {
     let mut game = GameHarness::custom();
     let dragon = game.spawn_dragon(IVec2::new(5, 5));
-    game.spawn_torch(IVec2::new(6, 5)); // adjacent fire
+    // Burning oil on same tile — dragon has base OnFire so it's immune
+    game.app_mut().world_mut().spawn((
+        GridPos(IVec2::new(5, 5)),
+        Tags(BTreeSet::from([Tag::Oil, Tag::OnFire])),
+        DerivedTags::default(),
+    ));
     game.resolve();
     assert_eq!(
         game.entity_health(dragon),

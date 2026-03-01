@@ -121,6 +121,7 @@ pub fn resolve_environment(
         relation is_metal(Entity);
         relation is_explosive(Entity);
         relation is_fire_resist(Entity);
+        relation is_fire_source(Entity);
 
         // Base relations (input-only, used for negation / self-immunity)
         relation is_base_wet(Entity);
@@ -133,6 +134,7 @@ pub fn resolve_environment(
         is_base_poisoned(e) <-- has_tag(e, t) if *t == Tag::Poisoned;
         is_base_electrified(e) <-- has_tag(e, t) if *t == Tag::Electrified;
         is_fire_resist(e) <-- has_tag(e, t) if *t == Tag::FireResist;
+        is_fire_source(e) <-- has_tag(e, t) if *t == Tag::FireSource;
 
         // Full wet: includes derived wetness (from melting)
         is_wet(e) <-- is_base_wet(e);
@@ -140,7 +142,6 @@ pub fn resolve_environment(
         // Material decomposition
         is_flammable(e) <-- has_tag(e, t) if *t == Tag::Wood;
         is_flammable(e) <-- has_tag(e, t) if *t == Tag::Oil;
-        is_flammable(e) <-- has_tag(e, t) if *t == Tag::Flesh;
         is_flesh(e) <-- has_tag(e, t) if *t == Tag::Flesh;
         is_ice(e) <-- has_tag(e, t) if *t == Tag::Ice;
         is_metal(e) <-- has_tag(e, t) if *t == Tag::Metal;
@@ -161,25 +162,37 @@ pub fn resolve_environment(
         derived(e, Tag::Conductive) <-- is_conductive(e);
 
         // === FIRE RULES ===
+        // Flammable materials (Wood, Oil) catch fire from adjacent OnFire or FireSource
         derived(e, Tag::OnFire) <-- is_flammable(e), adjacent(e, other), is_on_fire(other), !is_base_wet(e);
+        derived(e, Tag::OnFire) <-- is_flammable(e), adjacent(e, other), is_fire_source(other), !is_base_wet(e);
+        // Flesh catches fire ONLY from same-tile OnFire (not FireSource, not adjacency)
+        derived(e, Tag::OnFire) <-- is_flesh(e), same_tile(e, other), is_on_fire(other), !is_base_wet(e), !is_base_on_fire(e);
         is_on_fire(e) <-- derived(e, t) if *t == Tag::OnFire;
 
+        // Ice melts from adjacent OnFire or FireSource
         derived(e, Tag::Melted) <-- is_ice(e), adjacent(e, other), is_on_fire(other);
+        derived(e, Tag::Melted) <-- is_ice(e), adjacent(e, other), is_fire_source(other);
         derived(e, Tag::Wet) <-- derived(e, t) if *t == Tag::Melted;
         is_wet(e) <-- derived(e, t) if *t == Tag::Wet;
+        // Water extinguishes both OnFire and FireSource
         derived(e, Tag::Extinguished) <-- is_wet(e), is_on_fire(e);
+        derived(e, Tag::Extinguished) <-- is_wet(e), is_fire_source(e);
 
-        derived(e, Tag::FireDamage) <-- is_flesh(e), same_tile(e, other), is_on_fire(other), !is_base_on_fire(e), !is_fire_resist(e);
-        derived(e, Tag::FireDamage) <-- is_flesh(e), adjacent(e, other), is_on_fire(other), !is_base_on_fire(e), !is_fire_resist(e);
+        // Fire damage: only when flesh itself is on fire (derived, not base = immune)
+        derived(e, Tag::FireDamage) <-- is_flesh(e), is_on_fire(e), !is_base_on_fire(e), !is_fire_resist(e);
+        // Ice Golem (Ice + Flesh) takes fire damage from melting
         derived(e, Tag::FireDamage) <-- is_flesh(e), derived(e, t) if *t == Tag::Melted;
 
         // === POISON RULES ===
-        derived(e, Tag::Poisoned) <-- adjacent(e, other), is_poisoned(other), !is_base_on_fire(e);
+        // Poison spread blocked by OnFire and FireSource (fire burns away poison)
+        derived(e, Tag::Poisoned) <-- adjacent(e, other), is_poisoned(other), !is_base_on_fire(e), !is_fire_source(e);
         is_poisoned(e) <-- derived(e, t) if *t == Tag::Poisoned;
         derived(e, Tag::PoisonDamage) <-- is_flesh(e), adjacent(e, other), is_poisoned(other), !is_base_poisoned(e);
         derived(e, Tag::PoisonDamage) <-- is_flesh(e), same_tile(e, other), is_poisoned(other), !is_base_poisoned(e);
         derived(e, Tag::PoisonBurned) <-- is_poisoned(e), is_on_fire(e);
         derived(e, Tag::PoisonBurned) <-- is_poisoned(e), adjacent(e, other), is_on_fire(other);
+        derived(e, Tag::PoisonBurned) <-- is_poisoned(e), is_fire_source(e);
+        derived(e, Tag::PoisonBurned) <-- is_poisoned(e), adjacent(e, other), is_fire_source(other);
 
         // === ELECTRICITY RULES ===
         derived(e, Tag::Electrified) <-- is_conductive(e), adjacent(e, other), is_electrified(other);
@@ -232,7 +245,13 @@ pub fn resolve_player_turn(
         ),
     >,
     mut pushable_query: Query<
-        (Entity, &mut GridPos, Option<&Blocking>),
+        (
+            Entity,
+            &mut GridPos,
+            Option<&Blocking>,
+            Option<&Tags>,
+            Option<&DerivedTags>,
+        ),
         (With<Pushable>, Without<Player>),
     >,
     all_pos_query: Query<&GridPos, (Without<Player>, Without<Pushable>)>,
@@ -257,8 +276,8 @@ pub fn resolve_player_turn(
             Without<Item>,
         ),
     >,
-    weapon_query: Query<
-        (&WeaponDamage, Option<&Tags>),
+    item_stats_query: Query<
+        (Option<&WeaponDamage>, Option<&ArmorDefense>, Option<&Tags>),
         (With<Item>, Without<Enemy>, Without<Player>),
     >,
     chest_query: Query<
@@ -349,8 +368,10 @@ pub fn resolve_player_turn(
         let mut weapon_tags_to_apply: Vec<Tag> = Vec::new();
 
         if let Some(weapon_entity) = inventory.weapon {
-            if let Ok((wpn_dmg, wpn_tags)) = weapon_query.get(weapon_entity) {
-                total_damage += wpn_dmg.0;
+            if let Ok((wpn_dmg, _, wpn_tags)) = item_stats_query.get(weapon_entity) {
+                if let Some(wpn_dmg) = wpn_dmg {
+                    total_damage += wpn_dmg.0;
+                }
                 if let Some(tags) = wpn_tags {
                     if tags.0.contains(&Tag::Poisoned) {
                         weapon_tags_to_apply.push(Tag::Poisoned);
@@ -417,8 +438,8 @@ pub fn resolve_player_turn(
     // Check if there's a pushable entity at the target
     let pushable_at_target = pushable_query
         .iter()
-        .find(|(_, pos, _)| pos.0 == target)
-        .map(|(e, _, _)| e);
+        .find(|(_, pos, _, _, _)| pos.0 == target)
+        .map(|(e, _, _, _, _)| e);
 
     if let Some(push_entity) = pushable_at_target {
         let push_dest = target + dir;
@@ -428,7 +449,7 @@ pub fn resolve_player_turn(
             .any(|(_, gp, _, _, _, _)| gp.0 == push_dest);
         let dest_blocked_pushable = pushable_query
             .iter()
-            .any(|(e, pos, _)| e != push_entity && pos.0 == push_dest);
+            .any(|(e, pos, _, _, _)| e != push_entity && pos.0 == push_dest);
         let dest_occupied = all_pos_query.iter().any(|gp| gp.0 == push_dest);
         let dest_blocked_chest = chest_query.iter().any(|(_, gp)| gp.0 == push_dest);
 
@@ -438,14 +459,43 @@ pub fn resolve_player_turn(
             && !dest_occupied
             && !dest_blocked_chest
         {
-            if let Ok((_, mut push_pos, _)) = pushable_query.get_mut(push_entity) {
+            // Check if pushed entity is on fire before moving it
+            let push_on_fire = pushable_query
+                .get(push_entity)
+                .map(|(_, _, _, tags, derived)| {
+                    tags.is_some_and(|t| t.0.contains(&Tag::OnFire))
+                        || derived.is_some_and(|d| d.0.contains(&Tag::OnFire))
+                })
+                .unwrap_or(false);
+
+            if let Ok((_, mut push_pos, _, _, _)) = pushable_query.get_mut(push_entity) {
                 push_pos.0 = push_dest;
             }
             player_pos.0 = target;
+
+            // Pushing a burning entity deals 1 damage (reduced by armor)
+            if push_on_fire {
+                let Ok((_, _, ref inventory, ref mut health, _)) = player_query.single_mut()
+                else {
+                    next_phase.set(TurnPhase::EnemyResolve);
+                    return;
+                };
+                let armor_def = inventory
+                    .armor
+                    .and_then(|e| item_stats_query.get(e).ok())
+                    .and_then(|(_, armor, _)| armor)
+                    .map(|a| a.0)
+                    .unwrap_or(0);
+                let dmg = (1 - armor_def).max(0);
+                if dmg > 0 {
+                    health.0 -= dmg;
+                    game_log.push("Burned while pushing!");
+                }
+            }
         } else {
             let pushable_is_blocking = pushable_query
                 .get(push_entity)
-                .map(|(_, _, b)| b.is_some())
+                .map(|(_, _, b, _, _)| b.is_some())
                 .unwrap_or(false);
             if !pushable_is_blocking {
                 player_pos.0 = target;
@@ -459,14 +509,14 @@ pub fn resolve_player_turn(
         let blocked_wall = blocking_query.iter().find(|(_, gp)| gp.0 == target);
         let blocked_pushable = pushable_query
             .iter()
-            .find(|(_, pos, b)| pos.0 == target && b.is_some());
+            .find(|(_, pos, b, _, _)| pos.0 == target && b.is_some());
         if blocked_wall.is_none() && blocked_pushable.is_none() {
             player_pos.0 = target;
         } else {
             if let Some((entity, _)) = blocked_wall {
                 flash_entity(&mut commands, entity);
             }
-            if let Some((entity, _, _)) = blocked_pushable {
+            if let Some((entity, _, _, _, _)) = blocked_pushable {
                 flash_entity(&mut commands, entity);
             }
             next_phase.set(TurnPhase::WaitingForInput);
