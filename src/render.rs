@@ -441,6 +441,23 @@ pub fn spawn_sprites(
     }
 }
 
+/// Reactively hide sprites that have no GridPos (e.g. items in inventory).
+pub fn sync_visibility(
+    mut with_pos: Query<&mut Visibility, (With<HasSprite>, With<GridPos>)>,
+    mut without_pos: Query<&mut Visibility, (With<HasSprite>, Without<GridPos>)>,
+) {
+    for mut vis in without_pos.iter_mut() {
+        if *vis != Visibility::Hidden {
+            *vis = Visibility::Hidden;
+        }
+    }
+    for mut vis in with_pos.iter_mut() {
+        if *vis == Visibility::Hidden {
+            *vis = Visibility::Inherited;
+        }
+    }
+}
+
 pub fn sync_transforms(mut query: Query<(&GridPos, &mut Transform), Changed<GridPos>>) {
     for (grid_pos, mut transform) in query.iter_mut() {
         transform.translation.x = grid_pos.0.x as f32 * CELL_SIZE;

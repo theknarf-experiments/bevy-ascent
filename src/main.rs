@@ -78,7 +78,7 @@ fn main() {
         )
         .add_systems(
             Update,
-            (spawn_sprites, sync_transforms, tick_flash_timers)
+            (spawn_sprites, sync_transforms, sync_visibility, tick_flash_timers)
                 .run_if(in_state(GameState::Playing)),
         )
         .add_systems(

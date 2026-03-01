@@ -338,23 +338,21 @@ pub fn pickup_items(
                         // Drop old weapon at player position
                         commands
                             .entity(old_weapon)
-                            .insert((GridPos(player_pos.0), FloorEntity, Visibility::Inherited));
+                            .insert((GridPos(player_pos.0), FloorEntity));
                     }
                     inventory.weapon = Some(entity);
                     commands.entity(entity).remove::<GridPos>();
                     commands.entity(entity).remove::<FloorEntity>();
-                    commands.entity(entity).insert(Visibility::Hidden);
                 }
                 EquipSlot::Armor => {
                     if let Some(old_armor) = inventory.armor.take() {
                         commands
                             .entity(old_armor)
-                            .insert((GridPos(player_pos.0), FloorEntity, Visibility::Inherited));
+                            .insert((GridPos(player_pos.0), FloorEntity));
                     }
                     inventory.armor = Some(entity);
                     commands.entity(entity).remove::<GridPos>();
                     commands.entity(entity).remove::<FloorEntity>();
-                    commands.entity(entity).insert(Visibility::Hidden);
                 }
             }
             continue;
@@ -366,7 +364,6 @@ pub fn pickup_items(
                 inventory.consumables.push(entity);
                 commands.entity(entity).remove::<GridPos>();
                 commands.entity(entity).remove::<FloorEntity>();
-                commands.entity(entity).insert(Visibility::Hidden);
             }
             // If full, item stays on ground
             continue;
